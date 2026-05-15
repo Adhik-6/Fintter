@@ -1,59 +1,126 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import '../global.css';
+import { useEffect, useState, useCallback } from 'react';
+import { View, Text } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { useFonts } from 'expo-font';
+import { initializeDatabase } from '@src/db';
+import { useStore } from '@src/store';
+import { colors } from '@src/theme';
+import { processRecurringTransactions } from '@src/services/recurringService';
+import { updateStreaks, checkTransactionMilestones } from '@src/services/gamificationEngine';
 
-import { useColorScheme } from '@/components/useColorScheme';
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Keep splash screen visible while loading
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
+  const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const router = useRouter();
+  const segments = useSegments();
+
+  const fetchWallets = useStore((s) => s.fetchWallets);
+  const fetchCategories = useStore((s) => s.fetchCategories);
+
+  const [fontsLoaded] = useFonts({
+    'SpaceMono-Regular': require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
+  // Initialize database on mount
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    async function init() {
+      try {
+        await initializeDatabase();
+        // Hydrate critical store data
+        await Promise.all([fetchWallets(), fetchCategories()]);
+        setDbReady(true);
+        // Fire-and-forget: process recurring txns & update gamification
+        processRecurringTransactions().catch(console.warn);
+        updateStreaks().catch(console.warn);
+        checkTransactionMilestones().catch(console.warn);
+      } catch (error) {
+        console.error('[App] DB init failed:', error);
+        setDbError(error instanceof Error ? error.message : 'Unknown error');
+      }
     }
-  }, [loaded]);
+    init();
+  }, [fetchWallets, fetchCategories]);
 
-  if (!loaded) {
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded && dbReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, dbReady]);
+
+  if (!fontsLoaded || !dbReady) {
+    if (dbError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: colors.surface0, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={{ color: colors.expense, fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Database Error</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center' }}>{dbError}</Text>
+        </View>
+      );
+    }
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <View style={{ flex: 1, backgroundColor: colors.surface0 }} onLayout={onLayoutRootView}>
+      <StatusBar style="light" backgroundColor={colors.black} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.surface0 },
+          animation: 'slide_from_right',
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen
+          name="modals/quick-add"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="modals/transaction-detail"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="modals/category-picker"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="modals/mood-picker"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="modals/smart-scan"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen name="onboarding/welcome" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="onboarding/setup-currency" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding/setup-categories" options={{ headerShown: false }} />
+        <Stack.Screen name="+not-found" />
       </Stack>
-    </ThemeProvider>
+    </View>
   );
 }
