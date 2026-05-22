@@ -1,39 +1,63 @@
 /**
  * Transaction History — timeline grouped by day.
  */
-import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, RefreshControl } from 'react-native';
+
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, RefreshControl, ScrollView } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
+import { Calendar } from 'react-native-calendars';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
 import { formatAmount } from '@src/utils/currency';
 import { formatTransactionDate, formatTime } from '@src/utils/date';
+import { format } from 'date-fns';
 import type { TransactionWithDetails, TransactionType } from '@src/features/transactions/types';
 
 type ListItem = { type: 'header'; date: string } | { type: 'transaction'; data: TransactionWithDetails };
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ date?: string }>();
   const [refreshing, setRefreshing] = useState(false);
   const [filterType, setFilterType] = useState<TransactionType | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(params.date ?? format(new Date(), 'yyyy-MM-dd'));
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+
   const transactions = useStore((s) => s.transactions);
   const fetchTransactions = useStore((s) => s.fetchTransactions);
   const deleteTransaction = useStore((s) => s.deleteTransaction);
+  const categories = useStore((s) => s.categories);
 
-  useEffect(() => { fetchTransactions({ limit: 100 }); }, []);
+  useEffect(() => { fetchTransactions({ limit: 500 }); }, []);
+
+  useEffect(() => {
+    if (params.date) {
+      setSelectedDate(params.date);
+    }
+  }, [params.date]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchTransactions({ limit: 100, type: filterType ?? undefined });
+    await fetchTransactions({ limit: 500, type: filterType ?? undefined });
     setRefreshing(false);
   }, [filterType]);
+
+  // Compute available categories for the currently filtered transactions (ignoring category filter)
+  const baseFiltered = transactions
+    .filter((t) => !selectedDate || t.date.startsWith(selectedDate))
+    .filter((t) => !filterType || t.type === filterType);
+
+  const availableCategoryIds = new Set(baseFiltered.map(t => t.categoryId));
+  const availableCategories = categories.filter(c => availableCategoryIds.has(c.id));
+
+  // Apply category filter
+  const filtered = selectedCategoryId ? baseFiltered.filter((t) => t.categoryId === selectedCategoryId) : baseFiltered;
 
   // Group by day
   const listData: ListItem[] = [];
   let lastDate = '';
-  const filtered = filterType ? transactions.filter((t) => t.type === filterType) : transactions;
   for (const tx of filtered) {
     const dateKey = tx.date.substring(0, 10);
     if (dateKey !== lastDate) {
@@ -74,18 +98,14 @@ export default function HistoryScreen() {
     );
   };
 
-  return (
-    <View style={styles.container}>
-      <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
-        <Text style={styles.title}>History</Text>
-      </Animated.View>
-
+  const renderHeader = () => (
+    <View style={{ paddingTop: 10 }}>
       {/* Filter Bar */}
-      <View style={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {([null, 'expense', 'income', 'transfer'] as const).map((type) => (
           <Pressable
             key={type ?? 'all'}
-            onPress={() => { setFilterType(type); }}
+            onPress={() => { setFilterType(type); setSelectedCategoryId(null); }}
             style={[styles.filterChip, filterType === type && styles.filterChipActive]}
           >
             <Text style={[styles.filterText, filterType === type && styles.filterTextActive]}>
@@ -93,15 +113,69 @@ export default function HistoryScreen() {
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
+
+      <Calendar
+        current={selectedDate || undefined}
+        maxDate={format(new Date(), 'yyyy-MM-dd')}
+        onDayPress={(day: any) => {
+          if (selectedDate === day.dateString) setSelectedDate('');
+          else setSelectedDate(day.dateString);
+          setSelectedCategoryId(null); // Reset category when date changes
+        }}
+        markedDates={selectedDate ? { [selectedDate]: { selected: true, selectedColor: colors.cyan } } : {}}
+        theme={{
+          backgroundColor: colors.surface0,
+          calendarBackground: colors.surface1,
+          textSectionTitleColor: colors.textMuted,
+          selectedDayBackgroundColor: colors.cyan,
+          selectedDayTextColor: colors.black,
+          todayTextColor: colors.cyan,
+          dayTextColor: colors.textPrimary,
+          textDisabledColor: colors.textDisabled,
+          monthTextColor: colors.textPrimary,
+          arrowColor: colors.cyan,
+        }}
+        style={styles.calendar}
+      />
+
+      {/* Category Filter */}
+      {availableCategories.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catScroll}>
+          <Pressable
+            onPress={() => setSelectedCategoryId(null)}
+            style={[styles.filterChip, !selectedCategoryId && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterText, !selectedCategoryId && styles.filterTextActive]}>All Cats</Text>
+          </Pressable>
+          {availableCategories.map(c => (
+            <Pressable
+              key={c.id}
+              onPress={() => setSelectedCategoryId(c.id)}
+              style={[styles.filterChip, selectedCategoryId === c.id && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterText, selectedCategoryId === c.id && styles.filterTextActive]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
+        <Text style={styles.title}>History</Text>
+      </Animated.View>
 
       {(() => {
         const flashListProps = {
           data: listData,
           renderItem,
+          ListHeaderComponent: renderHeader,
           estimatedItemSize: 60,
           keyExtractor: (item: ListItem, idx: number) => item.type === 'header' ? `h-${item.date}` : `t-${item.data.id}`,
-          contentContainerStyle: { paddingBottom: 100 },
+          contentContainerStyle: { paddingBottom: 100, paddingHorizontal: 20 },
           refreshControl: <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cyan} />,
           ListEmptyComponent: (
             <View style={styles.empty}>
@@ -122,7 +196,9 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 10 },
   title: { fontSize: 28, fontWeight: '700', color: colors.textPrimary },
 
-  filterRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 16 },
+  filterRow: { gap: 8, marginBottom: 12 },
+  catScroll: { gap: 8, marginBottom: 16 },
+  calendar: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, marginBottom: 12, paddingBottom: 10 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
   filterChipActive: { borderColor: colors.cyan, backgroundColor: colors.cyanGlow },
   filterText: { fontSize: 13, color: colors.textMuted },

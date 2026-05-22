@@ -20,13 +20,18 @@ export default function DashboardScreen() {
   const wallets = useStore((s) => s.wallets);
   const activeWalletId = useStore((s) => s.activeWalletId);
   const setActiveWallet = useStore((s) => s.setActiveWallet);
-  const transactions = useStore((s) => s.transactions);
+  const allTransactions = useStore((s) => s.transactions);
   const fetchTransactions = useStore((s) => s.fetchTransactions);
   const fetchWallets = useStore((s) => s.fetchWallets);
   const budgets = useStore((s) => s.budgets);
   const budgetProgress = useStore((s) => s.budgetProgress);
   const fetchBudgets = useStore((s) => s.fetchBudgets);
   const computeBudgetProgress = useStore((s) => s.computeBudgetProgress);
+
+  // Filter transactions by active wallet
+  const transactions = activeWalletId
+    ? allTransactions.filter((t) => t.walletId === activeWalletId)
+    : allTransactions;
 
   useEffect(() => {
     loadData();
@@ -49,7 +54,9 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }, [loadData]);
 
-  const totalBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
+  const totalBalance = activeWalletId
+    ? (wallets.find((w) => w.id === activeWalletId)?.balance ?? 0)
+    : wallets.reduce((sum, w) => sum + w.balance, 0);
   const activeWallet = wallets.find((w) => w.id === activeWalletId);
 
   // Today's totals
@@ -94,10 +101,10 @@ export default function DashboardScreen() {
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.walletScroll}>
             <Pressable
-              onPress={() => setActiveWallet(0)}
+              onPress={() => setActiveWallet(null)}
               style={[styles.walletChip, !activeWalletId && styles.walletChipActive]}
             >
-              <Text style={styles.walletChipIcon}>💳</Text>
+              <Text style={styles.walletChipIcon}>🌐</Text>
               <Text style={[styles.walletChipText, !activeWalletId && styles.walletChipTextActive]}>All</Text>
             </Pressable>
             {wallets.map((wallet) => (
@@ -106,7 +113,9 @@ export default function DashboardScreen() {
                 onPress={() => setActiveWallet(wallet.id)}
                 style={[styles.walletChip, activeWalletId === wallet.id && styles.walletChipActive]}
               >
-                <Text style={styles.walletChipIcon}>{wallet.icon ?? '💳'}</Text>
+                <Text style={styles.walletChipIcon}>
+                  {wallet.name === 'Bank Account' ? '🏦' : (wallet.icon ?? '💳')}
+                </Text>
                 <Text style={[styles.walletChipText, activeWalletId === wallet.id && styles.walletChipTextActive]}>
                   {wallet.name}
                 </Text>

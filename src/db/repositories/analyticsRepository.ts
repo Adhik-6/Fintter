@@ -8,6 +8,9 @@ export interface MonthlySummary { totalIncome: number; totalExpense: number; net
 export interface CategoryBreakdown { categoryId: number; categoryName: string; categoryIcon: string; categoryColor: string; total: number; percentage: number; transactionCount: number; }
 export interface SpendingVelocity { todaySpent: number; yesterdaySpent: number; weekAvg: number; monthAvg: number; }
 export interface MoodSpendCorrelation { moodId: number; moodLabel: string; moodEmoji: string; avgSpend: number; transactionCount: number; }
+export interface TrendDataPoint { label: string; value: number; date: string; }
+export interface MerchantSummary { merchant: string; total: number; count: number; }
+export interface ImpulseStats { impulseTotal: number; plannedTotal: number; impulseCount: number; plannedCount: number; }
 
 export const analyticsRepository = {
   async getMonthlySummary(startDate: string, endDate: string, walletId?: number): Promise<MonthlySummary> {
@@ -66,6 +69,48 @@ export const analyticsRepository = {
       { $startDate: startDate, $endDate: endDate }
     );
     return rows.map(r => ({ moodId: r.mood_id as number, moodLabel: r.mood_label as string, moodEmoji: r.mood_emoji as string, avgSpend: Math.round(r.avg_spend as number), transactionCount: r.tx_count as number }));
+  },
+
+  async getSpendingTrend(startDate: string, endDate: string): Promise<TrendDataPoint[]> {
+    const db = getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT strftime('%Y-%m-%d', date) as day, SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate GROUP BY day ORDER BY day ASC`,
+      { $startDate: startDate, $endDate: endDate }
+    );
+    return rows.map(r => {
+      const dateObj = new Date(r.day as string);
+      return { label: `${dateObj.getDate()}/${dateObj.getMonth() + 1}`, value: r.total as number, date: r.day as string };
+    });
+  },
+
+  async getHeatmapData(startDate: string, endDate: string): Promise<Record<string, number>> {
+    const db = getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT strftime('%Y-%m-%d', date) as day, SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate GROUP BY day`,
+      { $startDate: startDate, $endDate: endDate }
+    );
+    const result: Record<string, number> = {};
+    for (const r of rows) { result[r.day as string] = r.total as number; }
+    return result;
+  },
+
+  async getTopMerchants(startDate: string, endDate: string, limit = 5): Promise<MerchantSummary[]> {
+    const db = getDb();
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT merchant, SUM(amount) as total, COUNT(id) as count FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate AND merchant IS NOT NULL AND merchant != '' GROUP BY merchant ORDER BY total DESC LIMIT $limit`,
+      { $startDate: startDate, $endDate: endDate, $limit: limit }
+    );
+    return rows.map(r => ({ merchant: r.merchant as string, total: r.total as number, count: r.count as number }));
+  },
+
+  async getImpulseStats(startDate: string, endDate: string): Promise<ImpulseStats> {
+    const db = getDb();
+    const impulse = await db.getFirstAsync<{ total: number | null, count: number }>(`SELECT SUM(amount) as total, COUNT(id) as count FROM transactions WHERE type = 'expense' AND is_impulse = 1 AND date >= $startDate AND date <= $endDate`, { $startDate: startDate, $endDate: endDate });
+    const planned = await db.getFirstAsync<{ total: number | null, count: number }>(`SELECT SUM(amount) as total, COUNT(id) as count FROM transactions WHERE type = 'expense' AND (is_impulse = 0 OR is_impulse IS NULL) AND date >= $startDate AND date <= $endDate`, { $startDate: startDate, $endDate: endDate });
+    return {
+      impulseTotal: impulse?.total ?? 0, impulseCount: impulse?.count ?? 0,
+      plannedTotal: planned?.total ?? 0, plannedCount: planned?.count ?? 0
+    };
   },
 
   async getCached(key: string): Promise<string | null> {

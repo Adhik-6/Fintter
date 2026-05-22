@@ -3,13 +3,16 @@
  */
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal } from 'react-native';
+import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
 import { formatAmount, parseAmountToSmallestUnit } from '@src/utils/currency';
 import { format, startOfMonth } from 'date-fns';
+import { CircularProgressArc } from '@src/components/ui/CircularProgressArc';
 
 export default function BudgetsScreen() {
+  const router = useRouter();
   const budgets = useStore((s) => s.budgets);
   const budgetProgress = useStore((s) => s.budgetProgress);
   const fetchBudgets = useStore((s) => s.fetchBudgets);
@@ -67,26 +70,23 @@ export default function BudgetsScreen() {
             const statusColor = pct >= 90 ? colors.expense : pct >= 60 ? colors.warning : colors.income;
             return (
               <Animated.View key={budget.id} entering={FadeInDown.delay(i * 50).duration(300)} style={styles.budgetCard}>
-                <View style={styles.budgetHeader}>
-                  <Text style={styles.budgetIcon}>{budget.categoryIcon ?? '🎯'}</Text>
-                  <Text style={[styles.budgetPct, { color: statusColor }]}>{Math.round(pct)}%</Text>
-                </View>
-                <Text style={styles.budgetName} numberOfLines={1}>{budget.name}</Text>
-
-                {/* Progress Arc Placeholder — circular bar */}
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBg}>
-                    <View style={[styles.progressFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: statusColor }]} />
+                <Pressable onPress={() => router.push({ pathname: '/modals/budget-detail', params: { id: budget.id } })} style={{ alignItems: 'center', width: '100%' }}>
+                  <View style={styles.arcContainer}>
+                    <CircularProgressArc percentage={pct} color={statusColor} size={80} strokeWidth={6} />
+                    <View style={styles.arcCenter}>
+                      <Text style={styles.budgetIcon}>{budget.categoryIcon ?? '🎯'}</Text>
+                    </View>
                   </View>
-                </View>
+                  <Text style={styles.budgetName} numberOfLines={1}>{budget.name}</Text>
 
-                <View style={styles.budgetAmounts}>
-                  <Text style={styles.budgetSpent}>{formatAmount(progress?.spent ?? 0)}</Text>
-                  <Text style={styles.budgetLimit}>/ {formatAmount(budget.amount)}</Text>
-                </View>
-                <Text style={[styles.budgetRemaining, { color: (progress?.remaining ?? 0) < 0 ? colors.expense : colors.textMuted }]}>
-                  {(progress?.remaining ?? 0) >= 0 ? `${formatAmount(progress?.remaining ?? 0)} left` : `${formatAmount(Math.abs(progress?.remaining ?? 0))} over`}
-                </Text>
+                  <View style={styles.budgetAmounts}>
+                    <Text style={styles.budgetSpent}>{formatAmount(progress?.spent ?? 0)}</Text>
+                    <Text style={styles.budgetLimit}>/ {formatAmount(budget.amount)}</Text>
+                  </View>
+                  <Text style={[styles.budgetRemaining, { color: (progress?.remaining ?? 0) < 0 ? colors.expense : colors.textMuted }]}>
+                    {(progress?.remaining ?? 0) >= 0 ? `${formatAmount(progress?.remaining ?? 0)} left` : `${formatAmount(Math.abs(progress?.remaining ?? 0))} over`}
+                  </Text>
+                </Pressable>
               </Animated.View>
             );
           })}
@@ -141,15 +141,12 @@ const styles = StyleSheet.create({
   emptySubtext: { fontSize: 13, color: colors.textMuted },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  budgetCard: { width: '47%', backgroundColor: colors.surface1, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border },
-  budgetHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  budgetIcon: { fontSize: 24 },
-  budgetPct: { fontSize: 14, fontWeight: '700' },
-  budgetName: { fontSize: 14, color: colors.textPrimary, fontWeight: '500', marginBottom: 12 },
-  progressContainer: { marginBottom: 10 },
-  progressBg: { height: 6, backgroundColor: colors.surface3, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, borderRadius: 3 },
-  budgetAmounts: { flexDirection: 'row', alignItems: 'baseline' },
+  budgetCard: { width: '47%', backgroundColor: colors.surface1, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  arcContainer: { position: 'relative', width: 80, height: 80, marginBottom: 12 },
+  arcCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  budgetIcon: { fontSize: 28 },
+  budgetName: { fontSize: 14, color: colors.textPrimary, fontWeight: '500', marginBottom: 8, textAlign: 'center' },
+  budgetAmounts: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
   budgetSpent: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, fontFamily: 'SpaceMono-Regular' },
   budgetLimit: { fontSize: 11, color: colors.textMuted, marginLeft: 2 },
   budgetRemaining: { fontSize: 11, marginTop: 4 },

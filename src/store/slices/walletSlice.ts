@@ -10,7 +10,7 @@ export interface WalletSlice {
   activeWalletId: number | null;
   isLoadingWallets: boolean;
   fetchWallets: () => Promise<void>;
-  setActiveWallet: (id: number) => void;
+  setActiveWallet: (id: number | null) => void;
   addWallet: (input: CreateWalletInput) => Promise<void>;
   updateWallet: (id: number, input: UpdateWalletInput) => Promise<void>;
   deleteWallet: (id: number) => Promise<void>;
@@ -26,8 +26,7 @@ export const createWalletSlice: StateCreator<WalletSlice, [], [], WalletSlice> =
     set({ isLoadingWallets: true });
     try {
       const wallets = await walletRepository.getAll();
-      const defaultWallet = wallets.find((w) => w.isDefault === 1);
-      set({ wallets, activeWalletId: defaultWallet?.id ?? wallets[0]?.id ?? null, isLoadingWallets: false });
+      set({ wallets, isLoadingWallets: false });
     } catch (error) {
       console.error('[Store] fetchWallets error:', error);
       set({ isLoadingWallets: false });

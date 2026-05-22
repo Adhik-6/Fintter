@@ -7,6 +7,7 @@ import * as SQLite from 'expo-sqlite';
 import { config } from '@src/constants/config';
 import { migrate001, MIGRATION_001_VERSION } from './migrations/001_initial';
 import { seedDatabase } from './seed';
+export { seedTestData } from './seed';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 

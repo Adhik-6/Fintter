@@ -9,6 +9,8 @@ export interface GamificationSlice {
   streaks: Streak[];
   milestones: Milestone[];
   financialHealthScore: HealthScore | null;
+  confettiKey: number;
+  triggerConfetti: () => void;
   isLoadingGamification: boolean;
   fetchGamification: () => Promise<void>;
   markMilestoneShown: (id: number) => Promise<void>;
@@ -18,7 +20,10 @@ export const createGamificationSlice: StateCreator<GamificationSlice, [], [], Ga
   streaks: [],
   milestones: [],
   financialHealthScore: null,
+  confettiKey: 0,
   isLoadingGamification: false,
+
+  triggerConfetti: () => set((state) => ({ confettiKey: state.confettiKey + 1 })),
 
   fetchGamification: async () => {
     set({ isLoadingGamification: true });
