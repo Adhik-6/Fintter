@@ -49,7 +49,8 @@ export const categoryRepository = {
 
   async delete(id: number): Promise<void> {
     const db = getDb();
-    await db.runAsync('DELETE FROM categories WHERE id = $id AND is_system = 0', { $id: id });
+    await db.runAsync('DELETE FROM transactions WHERE category_id = $id', { $id: id });
+    await db.runAsync('DELETE FROM categories WHERE id = $id', { $id: id });
   },
 };
 

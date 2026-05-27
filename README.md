@@ -2,7 +2,7 @@
 
   <h1>Fintter</h1>
   
-  <p>A beautifully designed, local-first personal finance tracker with gamification and rich analytics. </p>
+  <p>A beautifully designed, local-first personal finance tracker with gamification, smart SMS scanning, and rich analytics.</p>
   
    <!-- Badges -->
   <p>
@@ -58,21 +58,22 @@ Managing personal finances shouldn't be boring or overly complex. Fintter brings
 | Platform       | Technologies Used                                |
 |----------------|--------------------------------------------------|
 | Framework      | Expo / React Native                              |
-| Styling        | NativeWind (Tailwind CSS)                        |
+| Language       | TypeScript                                       |
 | State Mgmt     | Zustand                                          |
 | Database       | SQLite (`expo-sqlite`)                           |
-| Charts         | `react-native-gifted-charts`                     |
+| Local Storage  | `react-native-mmkv`                              |
+| Charts         | `react-native-gifted-charts`, `react-native-skia`|
 | Animations     | `react-native-reanimated` & `expo-haptics`       |
-| Calendar       | `react-native-calendars`                         |
 
 ### :dart: Features
 
 - **Dashboard & Wallets**: Manage multiple wallets seamlessly with global filtering and beautiful balance cards.
-- **Advanced Analytics**: Interactive pie charts, trend line charts, top merchants tracking, and deep insights into how your mood correlates with your spending.
-- **Budgeting**: Create budgets per category and track your progress with visually striking circular arcs and progress bars. Tap on any budget to see its transaction ledger!
-- **History Calendar**: A rich, scrollable calendar view that lets you pinpoint exactly when and where you spent money, filterable by date and category.
-- **Gamification**: Build financial discipline with daily streaks, earn milestones, and celebrate your savings with confetti animations!
-- **Quick Add & Smart Scan**: Lightning-fast transaction entry with support for marking impulse purchases and tracking your mood.
+- **Advanced Analytics**: Interactive pie charts, spending trend line charts, spending heatmaps (42-day grids), top merchants tracking, and deep insights into how your mood correlates with your spending.
+- **Budgeting**: Create budgets per category and track your progress with visually striking circular arcs and progress bars.
+- **History Timeline**: A rich, scrollable timeline grouped by day that lets you pinpoint exactly when and where you spent money.
+- **Gamification**: Build financial discipline with daily streaks, earn milestones, and celebrate your savings with confetti animations.
+- **Smart SMS / Notification Scanning**: Automatic transaction detection based on incoming push notifications and SMS regex matching (requires user validation).
+- **Security & Backup**: Encrypted JSON backups, restoring via local device, and Biometric / App Password locks.
 - **Offline First**: Your financial data never leaves your device thanks to the robust local SQLite database integration.
 
 <!-- Getting Started -->
@@ -116,16 +117,18 @@ You can then run the app on an Android/iOS emulator, or scan the QR code using t
 
 - **Adding an Expense**: Tap the floating `+` button on the dashboard to quickly add a transaction.
 - **Reviewing Budgets**: Navigate to the Budgets tab to see how close you are to your limits. Tap any budget to view all related expenses.
-- **Analyzing Habits**: Visit the Analytics tab to explore your spending velocity, 7-day averages, category breakdowns, and how your mood affects your wallet.
+- **Analyzing Habits**: Visit the Analytics tab to explore your spending velocity, trend lines, heatmap blocks, category breakdowns, and how your mood affects your wallet.
+- **Backing Up**: Visit Settings to securely encrypt and export your data as a JSON payload, or to completely wipe your data with an app password.
 
 <!-- ROADMAP -->
 ## :compass: Roadmap
 
-- [x] Integrate `react-native-calendars` for History view
-- [x] Add interactive Analytics Charts
-- [x] Implement Budget specific transaction ledgers
-- [ ] iCloud / Google Drive automated backup
-- [ ] CSV Export for transactions
+- [x] Integrate immersive visual Analytics Charts (Gifted Charts)
+- [x] Spending Heatmap generation
+- [x] Settings layout and Clear Data functions
+- [ ] Smart SMS / Notification parser
+- [ ] Encrypted backup/restore functionalities
+- [ ] App password and biometric locks
 - [ ] Multi-currency support
 
 <!-- CONTRIBUTING -->
@@ -172,9 +175,9 @@ Project Link: [https://github.com/Adhik-6/Fintter](https://github.com/Adhik-6/Fi
 ## :gem: Acknowledgements
 
  - [Expo](https://expo.dev/)
- - [NativeWind](https://www.nativewind.dev/)
  - [Zustand](https://github.com/pmndrs/zustand)
  - [React Native Gifted Charts](https://gifted-charts.web.app/)
+ - [React Native Skia](https://shopify.github.io/react-native-skia/)
  - [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

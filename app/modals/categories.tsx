@@ -56,8 +56,9 @@ export default function CategoriesScreen() {
   };
 
   const handleDelete = (cat: Category) => {
-    if (cat.isSystem) { Alert.alert('System Category', 'Built-in categories cannot be deleted.'); return; }
-    Alert.alert('Delete Category', `Delete "${cat.name}"? Existing transactions won't be affected.`, [
+    Alert.alert(
+      'Delete Category', 
+      `Delete "${cat.name}"? WARNING: Deleting this category will permanently delete all transactions associated with it. This action cannot be undone.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deleteCategory(cat.id) },
     ]);
@@ -74,11 +75,10 @@ export default function CategoriesScreen() {
           <Pressable onPress={() => handleEdit(cat)} style={styles.actionBtn}>
             <Ionicons name="pencil-outline" size={18} color={colors.cyan} />
           </Pressable>
-          {!cat.isSystem ? (
-            <Pressable onPress={() => handleDelete(cat)} style={styles.actionBtn}>
-              <Ionicons name="trash-outline" size={18} color={colors.expense} />
-            </Pressable>
-          ) : (
+          <Pressable onPress={() => handleDelete(cat)} style={styles.actionBtn}>
+            <Ionicons name="trash-outline" size={18} color={colors.expense} />
+          </Pressable>
+          {cat.isSystem === 1 && (
             <View style={styles.systemBadge}>
               <Text style={styles.systemText}>System</Text>
             </View>
@@ -111,7 +111,7 @@ export default function CategoriesScreen() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {customCats.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>MY CATEGORIES</Text>
@@ -155,7 +155,7 @@ export default function CategoriesScreen() {
             <Text style={styles.iconHelper}>Type an emoji from your keyboard or pick below.</Text>
           </View>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ paddingHorizontal: 8 }}>
             <View style={[styles.iconGrid, { paddingVertical: 8 }]}>
               {PRESET_ICONS.map((ic) => (
                 <Pressable key={ic} onPress={() => setForm({ ...form, icon: ic })} style={[styles.iconBtn, form.icon === ic && styles.iconBtnActive]}>
@@ -178,7 +178,7 @@ export default function CategoriesScreen() {
             <View style={[styles.colorPreview, { backgroundColor: form.color || 'transparent' }]} />
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ paddingHorizontal: 8 }}>
             <View style={[styles.colorRow, { paddingVertical: 12 }]}>
               {PRESET_COLORS.map((c) => (
                 <Pressable key={c} onPress={() => setForm({ ...form, color: c })} style={[styles.colorBtn, { backgroundColor: c }, form.color === c && styles.colorBtnActive]} />

@@ -29,9 +29,14 @@ export const budgetRepository = {
     const db = getDb();
     const now = new Date().toISOString();
     const result = await db.runAsync(
-      `INSERT INTO budgets (name, category_id, wallet_id, amount, period, start_date, end_date, rollover, alert_at_percent, created_at, updated_at)
-       VALUES ($name, $categoryId, $walletId, $amount, $period, $startDate, $endDate, $rollover, $alertAtPercent, $createdAt, $updatedAt)`,
-      { $name: input.name, $categoryId: input.categoryId ?? null, $walletId: input.walletId ?? null, $amount: input.amount, $period: input.period, $startDate: input.startDate, $endDate: input.endDate ?? null, $rollover: input.rollover ?? 0, $alertAtPercent: input.alertAtPercent ?? config.budget.defaultAlertPercent, $createdAt: now, $updatedAt: now }
+      `INSERT INTO budgets (name, category_id, wallet_id, amount, period, start_date, end_date, scope, category_ids, budget_transaction_ids, reset_interval_value, reset_interval_unit, icon, rollover, alert_at_percent, created_at, updated_at)
+       VALUES ($name, $categoryId, $walletId, $amount, $period, $startDate, $endDate, $scope, $categoryIds, $budgetTransactionIds, $resetIntervalValue, $resetIntervalUnit, $icon, $rollover, $alertAtPercent, $createdAt, $updatedAt)`,
+      {
+        $name: input.name, $categoryId: input.categoryId ?? null, $walletId: input.walletId ?? null, $amount: input.amount, $period: input.period,
+        $startDate: input.startDate, $endDate: input.endDate ?? null, $scope: input.scope ?? 'overall', $categoryIds: input.categoryIds ?? null,
+        $budgetTransactionIds: input.budgetTransactionIds ?? null, $resetIntervalValue: input.resetIntervalValue ?? null, $resetIntervalUnit: input.resetIntervalUnit ?? null, $icon: input.icon ?? null, $rollover: input.rollover ?? 0, $alertAtPercent: input.alertAtPercent ?? config.budget.defaultAlertPercent,
+        $createdAt: now, $updatedAt: now
+      }
     );
     return result.lastInsertRowId;
   },
@@ -44,6 +49,12 @@ export const budgetRepository = {
     if (input.name !== undefined) { fields.push('name = $name'); params.$name = input.name; }
     if (input.amount !== undefined) { fields.push('amount = $amount'); params.$amount = input.amount; }
     if (input.period !== undefined) { fields.push('period = $period'); params.$period = input.period; }
+    if (input.scope !== undefined) { fields.push('scope = $scope'); params.$scope = input.scope; }
+    if (input.categoryIds !== undefined) { fields.push('category_ids = $categoryIds'); params.$categoryIds = input.categoryIds; }
+    if (input.budgetTransactionIds !== undefined) { fields.push('budget_transaction_ids = $budgetTransactionIds'); params.$budgetTransactionIds = input.budgetTransactionIds; }
+    if (input.resetIntervalValue !== undefined) { fields.push('reset_interval_value = $resetIntervalValue'); params.$resetIntervalValue = input.resetIntervalValue; }
+    if (input.resetIntervalUnit !== undefined) { fields.push('reset_interval_unit = $resetIntervalUnit'); params.$resetIntervalUnit = input.resetIntervalUnit; }
+    if (input.icon !== undefined) { fields.push('icon = $icon'); params.$icon = input.icon; }
     if (fields.length === 0) return;
     fields.push('updated_at = $updatedAt');
     await db.runAsync(`UPDATE budgets SET ${fields.join(', ')} WHERE id = $id`, params);
@@ -62,10 +73,30 @@ export const budgetRepository = {
     if (budget.categoryId) params.$categoryId = budget.categoryId;
     if (budget.walletId) params.$walletId = budget.walletId;
 
-    const result = await db.getFirstAsync<{ total: number | null }>(
-      `SELECT SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate ${catFilter} ${walFilter}`, params
-    );
-    const spent = result?.total ?? 0;
+    let query = '';
+
+    if (budget.scope === 'manual') {
+      // Manual scope: sum of transactions linked to this budget
+      query = `SELECT SUM(amount) as total FROM transactions WHERE budget_id = $budgetId AND type = 'expense'`;
+      params.$budgetId = budget.id;
+    } else if (budget.scope === 'category_group') {
+      // Category group scope
+      const catIds: number[] = JSON.parse(budget.categoryIds ?? '[]');
+      if (catIds.length === 0) {
+        // No categories selected = 0 spent
+        return { budgetId: budget.id, spent: 0, limit: budget.amount, percentUsed: 0, remaining: budget.amount, status: 'safe' };
+      }
+      const inClause = catIds.join(',');
+      query = `SELECT SUM(amount) as total FROM transactions WHERE type = 'expense' AND category_id IN (${inClause}) AND date >= $startDate AND date <= $endDate`;
+    } else {
+      // Overall scope
+      query = `SELECT SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate ${catFilter} ${walFilter}`;
+    }
+
+    // Sum from actual transactions
+    const result = await db.getFirstAsync<{ total: number | null }>(query, params);
+    let spent = result?.total ?? 0;
+
     const percentUsed = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
     let status: BudgetProgress['status'] = 'safe';
     if (percentUsed >= 100) status = 'exceeded';
@@ -80,7 +111,10 @@ function mapRow(row: Record<string, unknown>): BudgetWithDetails {
   return {
     id: row.id as number, name: row.name as string, categoryId: row.category_id as number | null,
     walletId: row.wallet_id as number | null, amount: row.amount as number, period: row.period as Budget['period'],
-    startDate: row.start_date as string, endDate: row.end_date as string | null, rollover: row.rollover as number,
+    scope: row.scope as Budget['scope'], categoryIds: row.category_ids as string | null, budgetTransactionIds: row.budget_transaction_ids as string | null,
+    startDate: row.start_date as string, endDate: row.end_date as string | null, 
+    resetIntervalValue: row.reset_interval_value as number | null, resetIntervalUnit: row.reset_interval_unit as string | null, icon: row.icon as string | null,
+    rollover: row.rollover as number,
     alertAtPercent: row.alert_at_percent as number, createdAt: row.created_at as string, updatedAt: row.updated_at as string,
     categoryName: (row.category_name as string | null) ?? null, categoryIcon: (row.category_icon as string | null) ?? null,
     categoryColor: (row.category_color as string | null) ?? null,

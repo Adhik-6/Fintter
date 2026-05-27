@@ -14,7 +14,7 @@ export interface CategorySlice {
   deleteCategory: (id: number) => Promise<void>;
 }
 
-export const createCategorySlice: StateCreator<CategorySlice, [], [], CategorySlice> = (set) => ({
+export const createCategorySlice: StateCreator<CategorySlice, [], [], CategorySlice> = (set, get) => ({
   categories: [],
   isLoadingCategories: false,
 
@@ -50,6 +50,11 @@ export const createCategorySlice: StateCreator<CategorySlice, [], [], CategorySl
       await categoryRepository.delete(id);
       const categories = await categoryRepository.getAll();
       set({ categories });
+      // Since transactions are cascade deleted, refresh them
+      const state = get() as any;
+      if (state.fetchTransactions) {
+        state.fetchTransactions();
+      }
     } catch (error) { console.error('[Store] deleteCategory error:', error); }
   },
 });

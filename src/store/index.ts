@@ -13,7 +13,7 @@ import { createWalletSlice, type WalletSlice } from './slices/walletSlice';
 import { createCategorySlice, type CategorySlice } from './slices/categorySlice';
 import { createTransactionSlice, type TransactionSlice } from './slices/transactionSlice';
 import { createBudgetSlice, type BudgetSlice } from './slices/budgetSlice';
-import { createRecurringSlice, type RecurringSlice } from './slices/recurringSlice';
+
 import { createAnalyticsSlice, type AnalyticsSlice } from './slices/analyticsSlice';
 import { createGamificationSlice, type GamificationSlice } from './slices/gamificationSlice';
 
@@ -23,7 +23,7 @@ export type FintterStore =
   CategorySlice &
   TransactionSlice &
   BudgetSlice &
-  RecurringSlice &
+
   AnalyticsSlice &
   GamificationSlice;
 
@@ -33,7 +33,7 @@ export const useStore = create<FintterStore>()((...args) => ({
   ...createCategorySlice(...args),
   ...createTransactionSlice(...args),
   ...createBudgetSlice(...args),
-  ...createRecurringSlice(...args),
+
   ...createAnalyticsSlice(...args),
   ...createGamificationSlice(...args),
 }));

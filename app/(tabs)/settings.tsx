@@ -55,6 +55,7 @@ export default function SettingsScreen() {
   const fetchWallets = useStore((s) => s.fetchWallets);
   const fetchCategories = useStore((s) => s.fetchCategories);
   const fetchTransactions = useStore((s) => s.fetchTransactions);
+  const fetchBudgets = useStore((s) => s.fetchBudgets);
   const refreshAnalytics = useStore((s) => s.refreshAnalytics);
   const fetchGamification = useStore((s) => s.fetchGamification);
 
@@ -97,17 +98,6 @@ export default function SettingsScreen() {
     try {
       await exportBackup();
       Alert.alert('✅ Export Complete', 'Your backup file has been shared.');
-    } catch (error) {
-      Alert.alert('Export Error', error instanceof Error ? error.message : 'Unknown error');
-    }
-    setExporting(false);
-  };
-
-  const handleExportCsv = async () => {
-    setExporting(true);
-    try {
-      await exportTransactionsCsv();
-      Alert.alert('✅ CSV Export Complete', 'Your transactions CSV has been shared.');
     } catch (error) {
       Alert.alert('Export Error', error instanceof Error ? error.message : 'Unknown error');
     }
@@ -172,11 +162,35 @@ export default function SettingsScreen() {
   };
 
   const handleClearData = () => {
-    Alert.alert('Clear All Data', 'This will permanently delete all your data. This action cannot be undone.', [
+    Alert.alert('Clear All Data', 'This will permanently delete all your transactions, budgets, and recurring templates. Wallets and system categories will be kept. This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete Everything', style: 'destructive', onPress: () => {
-          Alert.alert('Data Cleared', 'All data has been deleted.');
+        text: 'Delete Everything', style: 'destructive', onPress: async () => {
+          try {
+            const db = getDb();
+            // Delete all transactions, budgets, recurring templates
+            await db.runAsync('DELETE FROM transactions');
+            await db.runAsync('DELETE FROM budgets');
+            
+            // Delete custom categories (keep system ones — categories table does have is_system)
+            await db.runAsync('DELETE FROM categories WHERE is_system = 0');
+            
+            // Reset all wallet balances to 0 (wallets table has no is_system column)
+            await db.runAsync('UPDATE wallets SET balance = 0');
+
+            // Refresh store to clear UI
+            await Promise.all([
+              fetchWallets(),
+              fetchCategories(),
+              fetchTransactions({ limit: 50 }),
+              fetchBudgets(),
+              refreshAnalytics(),
+            ]);
+
+            Alert.alert('Data Cleared', 'All transactions, budgets, and recurring templates have been deleted.');
+          } catch (error) {
+            Alert.alert('Error', 'Failed to clear data: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          }
         }
       },
     ]);
@@ -220,10 +234,6 @@ export default function SettingsScreen() {
             onPress={() => router.push('/modals/categories' as any)}
           />
           <SettingItem
-            icon="🔄" iconName="repeat-outline" label="Recurring Transactions"
-            onPress={() => router.push('/modals/recurring' as any)}
-          />
-          <SettingItem
             icon="📡" iconName="code-slash-outline" label="Parser Rules"
             onPress={() => router.push('/modals/parser-rules' as any)}
           />
@@ -233,7 +243,6 @@ export default function SettingsScreen() {
       <Animated.View entering={FadeInDown.delay(200).duration(300)}>
         <SettingSection title="Data">
           <SettingItem icon="📤" iconName="cloud-upload-outline" label="Export Backup (JSON)" onPress={handleExportJson} loading={exporting} />
-          <SettingItem icon="📊" iconName="document-text-outline" label="Export Transactions (CSV)" onPress={handleExportCsv} loading={exporting} />
           <SettingItem icon="📥" iconName="cloud-download-outline" label="Import Backup" onPress={handleImport} loading={importing} />
           <SettingItem icon="🧪" iconName="flask-outline" label="Seed Test Data" onPress={handleSeedData} loading={seeding} />
         </SettingSection>

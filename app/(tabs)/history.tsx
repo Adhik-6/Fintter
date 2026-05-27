@@ -8,20 +8,20 @@ import { FlashList } from '@shopify/flash-list';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
 import { formatAmount } from '@src/utils/currency';
 import { formatTransactionDate, formatTime } from '@src/utils/date';
 import { format } from 'date-fns';
 import type { TransactionWithDetails, TransactionType } from '@src/features/transactions/types';
-
 type ListItem = { type: 'header'; date: string } | { type: 'transaction'; data: TransactionWithDetails };
 
 export default function HistoryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const [refreshing, setRefreshing] = useState(false);
-  const [filterType, setFilterType] = useState<TransactionType | null>(null);
+  const [filterType, setFilterType] = useState<TransactionType | 'upcoming' | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(params.date ?? format(new Date(), 'yyyy-MM-dd'));
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
@@ -30,7 +30,10 @@ export default function HistoryScreen() {
   const deleteTransaction = useStore((s) => s.deleteTransaction);
   const categories = useStore((s) => s.categories);
 
-  useEffect(() => { fetchTransactions({ limit: 500 }); }, []);
+
+  useEffect(() => { 
+    fetchTransactions({ limit: 500 }); 
+  }, []);
 
   useEffect(() => {
     if (params.date) {
@@ -40,7 +43,7 @@ export default function HistoryScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchTransactions({ limit: 500, type: filterType ?? undefined });
+    await fetchTransactions({ limit: 500, type: filterType && filterType !== 'upcoming' ? filterType : undefined });
     setRefreshing(false);
   }, [filterType]);
 
@@ -58,13 +61,33 @@ export default function HistoryScreen() {
   // Group by day
   const listData: ListItem[] = [];
   let lastDate = '';
-  for (const tx of filtered) {
-    const dateKey = tx.date.substring(0, 10);
-    if (dateKey !== lastDate) {
-      listData.push({ type: 'header', date: tx.date });
-      lastDate = dateKey;
+
+  if (filterType === 'upcoming') {
+    const now = new Date();
+    const todayStr = format(now, 'yyyy-MM-dd');
+    const upcomingList = transactions
+      .filter(tx => tx.date.substring(0, 10) > todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    let lastUpcomingDate = '';
+    upcomingList.forEach(tx => {
+      const dateKey = tx.date.substring(0, 10);
+      if (dateKey !== lastUpcomingDate) {
+        listData.push({ type: 'header', date: tx.date });
+        lastUpcomingDate = dateKey;
+      }
+      listData.push({ type: 'transaction', data: tx });
+    });
+  } else {
+
+    for (const tx of filtered) {
+      const dateKey = tx.date.substring(0, 10);
+      if (dateKey !== lastDate) {
+        listData.push({ type: 'header', date: tx.date });
+        lastDate = dateKey;
+      }
+      listData.push({ type: 'transaction', data: tx });
     }
-    listData.push({ type: 'transaction', data: tx });
   }
 
   const renderItem = ({ item }: { item: ListItem }) => {
@@ -76,21 +99,29 @@ export default function HistoryScreen() {
       );
     }
     const tx = item.data;
+    const isRecurring = tx.isRecurring === 1;
     return (
       <Pressable
         style={styles.txCard}
         onPress={() => router.push({ pathname: '/modals/transaction-detail', params: { id: tx.id } })}
       >
-        <View style={[styles.txIconWrap, { backgroundColor: tx.categoryColor + '20' }]}>
-          <Text style={styles.txIcon}>{tx.categoryIcon}</Text>
+        <View style={{ position: 'relative', marginRight: 12 }}>
+          <View style={[styles.txIconWrap, { backgroundColor: tx.categoryColor + '20' }]}>
+            <Text style={styles.txIcon}>{tx.categoryIcon}</Text>
+          </View>
+          {isRecurring && (
+            <View style={styles.recurringDot}>
+              <Ionicons name="repeat" size={9} color={colors.black} />
+            </View>
+          )}
         </View>
         <View style={styles.txInfo}>
           <Text style={styles.txName} numberOfLines={1}>{tx.merchant ?? tx.note ?? tx.categoryName}</Text>
           <Text style={styles.txMeta}>{tx.categoryName} • {tx.walletName}</Text>
         </View>
         <View style={styles.txRight}>
-          <Text style={[styles.txAmount, { color: tx.type === 'income' ? colors.income : colors.expense }]}>
-            {tx.type === 'income' ? '+' : '-'}{formatAmount(tx.amount)}
+          <Text style={[styles.txAmount, { color: tx.type === 'income' ? colors.income : tx.type === 'transfer' ? colors.transfer : colors.expense }]}>
+            {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '' : '-'}{formatAmount(tx.amount)}
           </Text>
           <Text style={styles.txTime}>{formatTime(tx.date)}</Text>
         </View>
@@ -102,7 +133,7 @@ export default function HistoryScreen() {
     <View style={{ paddingTop: 10 }}>
       {/* Filter Bar */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {([null, 'expense', 'income', 'transfer'] as const).map((type) => (
+        {([null, 'expense', 'income', 'transfer', 'upcoming'] as const).map((type) => (
           <Pressable
             key={type ?? 'all'}
             onPress={() => { setFilterType(type); setSelectedCategoryId(null); }}
@@ -123,7 +154,13 @@ export default function HistoryScreen() {
           else setSelectedDate(day.dateString);
           setSelectedCategoryId(null); // Reset category when date changes
         }}
-        markedDates={selectedDate ? { [selectedDate]: { selected: true, selectedColor: colors.cyan } } : {}}
+        markedDates={(() => {
+          const marks: Record<string, any> = {};
+          if (selectedDate) {
+            marks[selectedDate] = { selected: true, selectedColor: colors.cyan };
+          }
+          return marks;
+        })()}
         theme={{
           backgroundColor: colors.surface0,
           calendarBackground: colors.surface1,
@@ -166,6 +203,12 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
         <Text style={styles.title}>History</Text>
+        <Pressable
+          onPress={() => router.push(selectedDate ? { pathname: '/modals/quick-add', params: { date: selectedDate } } : '/modals/quick-add' as any)}
+          style={styles.addBtn}
+        >
+          <Ionicons name="add" size={24} color={colors.black} />
+        </Pressable>
       </Animated.View>
 
       {(() => {
@@ -193,8 +236,9 @@ export default function HistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface0 },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 10 },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 28, fontWeight: '700', color: colors.textPrimary },
+  addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.cyan, alignItems: 'center', justifyContent: 'center' },
 
   filterRow: { gap: 8, marginBottom: 12 },
   catScroll: { gap: 8, marginBottom: 16 },
@@ -208,14 +252,16 @@ const styles = StyleSheet.create({
   dayHeaderText: { fontSize: 14, color: colors.textSecondary, fontWeight: '600' },
 
   txCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface1, borderRadius: 14, padding: 14, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
-  txIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  txIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   txIcon: { fontSize: 20 },
+  recurringDot: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.cyan, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface0 },
   txInfo: { flex: 1 },
   txName: { fontSize: 15, color: colors.textPrimary, fontWeight: '500' },
   txMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   txRight: { alignItems: 'flex-end' },
   txAmount: { fontSize: 15, fontWeight: '700', fontFamily: 'SpaceMono-Regular' },
   txTime: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  deleteBtn: { marginTop: 4 },
 
   empty: { alignItems: 'center', paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },

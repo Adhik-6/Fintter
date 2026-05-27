@@ -45,14 +45,15 @@ export const transactionRepository = {
     const db = getDb();
     const now = new Date().toISOString();
     const result = await db.runAsync(
-      `INSERT INTO transactions (amount, type, category_id, wallet_id, to_wallet_id, note, merchant, tags, mood_id, is_impulse, is_recurring, recurring_id, source, date, created_at, updated_at)
-       VALUES ($amount, $type, $categoryId, $walletId, $toWalletId, $note, $merchant, $tags, $moodId, $isImpulse, $isRecurring, $recurringId, $source, $date, $createdAt, $updatedAt)`,
+      `INSERT INTO transactions (amount, type, category_id, wallet_id, to_wallet_id, note, merchant, tags, mood_id, is_impulse, is_recurring, next_transaction_id, recurring_days, source, budget_id, date, created_at, updated_at)
+       VALUES ($amount, $type, $categoryId, $walletId, $toWalletId, $note, $merchant, $tags, $moodId, $isImpulse, $isRecurring, $nextTransactionId, $recurringDays, $source, $budgetId, $date, $createdAt, $updatedAt)`,
       {
         $amount: input.amount, $type: input.type, $categoryId: input.categoryId, $walletId: input.walletId,
         $toWalletId: input.toWalletId ?? null, $note: input.note ?? null, $merchant: input.merchant ?? null,
         $tags: input.tags ? JSON.stringify(input.tags) : null, $moodId: input.moodId ?? null,
-        $isImpulse: input.isImpulse ?? 0, $isRecurring: input.isRecurring ?? 0, $recurringId: input.recurringId ?? null,
-        $source: input.source ?? 'manual', $date: input.date ?? now, $createdAt: now, $updatedAt: now,
+        $isImpulse: input.isImpulse ?? 0, $isRecurring: input.isRecurring ?? 0, 
+        $nextTransactionId: input.nextTransactionId ?? null, $recurringDays: input.recurringDays ?? null,
+        $source: input.source ?? 'manual', $budgetId: input.budgetId ?? null, $date: input.date ?? now, $createdAt: now, $updatedAt: now,
       }
     );
     return result.lastInsertRowId;
@@ -73,6 +74,10 @@ export const transactionRepository = {
     if (input.tags !== undefined) { fields.push('tags = $tags'); params.$tags = JSON.stringify(input.tags); }
     if (input.moodId !== undefined) { fields.push('mood_id = $moodId'); params.$moodId = input.moodId; }
     if (input.isImpulse !== undefined) { fields.push('is_impulse = $isImpulse'); params.$isImpulse = input.isImpulse; }
+    if (input.isRecurring !== undefined) { fields.push('is_recurring = $isRecurring'); params.$isRecurring = input.isRecurring; }
+    if (input.nextTransactionId !== undefined) { fields.push('next_transaction_id = $nextTransactionId'); params.$nextTransactionId = input.nextTransactionId; }
+    if (input.recurringDays !== undefined) { fields.push('recurring_days = $recurringDays'); params.$recurringDays = input.recurringDays; }
+    if (input.budgetId !== undefined) { fields.push('budget_id = $budgetId'); params.$budgetId = input.budgetId; }
     if (input.date !== undefined) { fields.push('date = $date'); params.$date = input.date; }
     if (fields.length === 0) return;
     fields.push('updated_at = $updatedAt');
@@ -109,6 +114,56 @@ export const transactionRepository = {
     );
     return result?.total ?? 0;
   },
+
+  async processDueRecurringTransactions(): Promise<void> {
+    const db = getDb();
+    const today = new Date();
+    // In SQLite, date strings might be ISO (e.g. 2026-05-27T...) or just YYYY-MM-DD.
+    // We query all potential candidates and filter in JS using date-fns for safety against timezones.
+    const candidates = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT * FROM transactions WHERE is_recurring = 1 AND next_transaction_id IS NULL AND recurring_days IS NOT NULL`
+    );
+
+    if (candidates.length === 0) return;
+
+    // Use dynamic import for date-fns to avoid blocking
+    const { parseISO, isBefore, isSameDay, addDays } = await import('date-fns');
+
+    for (const row of candidates) {
+      const tx = mapRow(row);
+      const txDate = tx.date.length === 10 ? parseISO(tx.date) : new Date(tx.date);
+      
+      // If the transaction's date is today or in the past, it's time to generate the next one!
+      if (isBefore(txDate, today) || isSameDay(txDate, today)) {
+        // Generate the next date
+        const nextDate = addDays(txDate, tx.recurringDays!);
+        
+        // Format to ISO
+        const nextDateStr = nextDate.toISOString();
+        
+        // Create the next transaction
+        const nextTxId = await this.create({
+          amount: tx.amount,
+          type: tx.type,
+          categoryId: tx.categoryId,
+          walletId: tx.walletId,
+          toWalletId: tx.toWalletId,
+          note: tx.note || undefined,
+          merchant: tx.merchant || undefined,
+          tags: tx.tags ? JSON.parse(tx.tags) : undefined,
+          moodId: tx.moodId,
+          isImpulse: tx.isImpulse,
+          isRecurring: 1,
+          recurringDays: tx.recurringDays,
+          source: tx.source,
+          date: nextDateStr,
+        });
+
+        // Link current to the new next transaction
+        await this.update(tx.id, { nextTransactionId: nextTxId });
+      }
+    }
+  },
 };
 
 function mapRow(row: Record<string, unknown>): Transaction {
@@ -118,17 +173,26 @@ function mapRow(row: Record<string, unknown>): Transaction {
     toWalletId: row.to_wallet_id as number | null, note: row.note as string | null,
     merchant: row.merchant as string | null, tags: row.tags as string | null,
     moodId: row.mood_id as number | null, isImpulse: row.is_impulse as number,
-    isRecurring: row.is_recurring as number, recurringId: row.recurring_id as number | null,
-    source: row.source as Transaction['source'], date: row.date as string,
+    isRecurring: row.is_recurring as number, 
+    nextTransactionId: row.next_transaction_id as number | null,
+    recurringDays: row.recurring_days as number | null,
+    source: row.source as Transaction['source'],
+    budgetId: row.budget_id as number | null,
+    date: row.date as string,
     createdAt: row.created_at as string, updatedAt: row.updated_at as string,
   };
 }
 
 function mapWithDetails(row: Record<string, unknown>): TransactionWithDetails {
+  const base = mapRow(row);
+  const isTransfer = base.type === 'transfer';
   return {
-    ...mapRow(row),
-    categoryName: row.category_name as string, categoryIcon: row.category_icon as string,
-    categoryColor: row.category_color as string, walletName: row.wallet_name as string,
-    moodEmoji: row.mood_emoji as string | null, moodLabel: row.mood_label as string | null,
+    ...base,
+    categoryName: isTransfer ? 'Wallet Transfer' : (row.category_name as string),
+    categoryIcon: isTransfer ? '🔄' : (row.category_icon as string),
+    categoryColor: isTransfer ? '#00BCD4' : (row.category_color as string),
+    walletName: row.wallet_name as string,
+    moodEmoji: row.mood_emoji as string | null,
+    moodLabel: row.mood_label as string | null,
   };
 }

@@ -121,14 +121,14 @@ function tryRule(rule: ParserRule, text: string): ParsedTransaction | null {
     const match = text.match(regex);
     if (!match) return null;
 
-    const amountStr = rule.amountGroup ? match[rule.amountGroup] : null;
+    const amountStr = match.groups?.amount;
     if (!amountStr) return null;
 
     const displayAmount = amountStr.replace(/,/g, '');
     const amount = parseAmountToSmallestUnit(displayAmount);
     if (amount <= 0) return null;
 
-    const merchant = rule.merchantGroup ? (match[rule.merchantGroup]?.trim() ?? null) : null;
+    const merchant = match.groups?.merchant ? match.groups.merchant.trim() : null;
 
     return {
       amount,

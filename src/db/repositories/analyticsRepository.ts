@@ -9,7 +9,7 @@ export interface CategoryBreakdown { categoryId: number; categoryName: string; c
 export interface SpendingVelocity { todaySpent: number; yesterdaySpent: number; weekAvg: number; monthAvg: number; }
 export interface MoodSpendCorrelation { moodId: number; moodLabel: string; moodEmoji: string; avgSpend: number; transactionCount: number; }
 export interface TrendDataPoint { label: string; value: number; date: string; }
-export interface MerchantSummary { merchant: string; total: number; count: number; }
+export interface MerchantSummary { merchant: string; total: number; count: number; categoryColor?: string; categoryName?: string; }
 export interface ImpulseStats { impulseTotal: number; plannedTotal: number; impulseCount: number; plannedCount: number; }
 
 export const analyticsRepository = {
@@ -73,14 +73,41 @@ export const analyticsRepository = {
 
   async getSpendingTrend(startDate: string, endDate: string): Promise<TrendDataPoint[]> {
     const db = getDb();
+    const today = new Date().toISOString().substring(0, 10) + 'T23:59:59';
+    const effectiveEnd = endDate < today ? endDate : today;
     const rows = await db.getAllAsync<Record<string, unknown>>(
-      `SELECT strftime('%Y-%m-%d', date) as day, SUM(amount) as total FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate GROUP BY day ORDER BY day ASC`,
-      { $startDate: startDate, $endDate: endDate }
+      `SELECT CAST(strftime('%d', date) AS INTEGER) as dayOfMonth, SUM(amount) as total 
+       FROM transactions 
+       WHERE type = 'expense' AND date >= $startDate AND date <= $effectiveEnd 
+       GROUP BY dayOfMonth`,
+      { $startDate: startDate, $effectiveEnd: effectiveEnd }
     );
-    return rows.map(r => {
-      const dateObj = new Date(r.day as string);
-      return { label: `${dateObj.getDate()}/${dateObj.getMonth() + 1}`, value: r.total as number, date: r.day as string };
+    
+    let w1 = 0, w2 = 0, w3 = 0, w4 = 0, w5 = 0;
+    const end = new Date(effectiveEnd);
+    const maxDays = new Date(endDate).getDate();
+    const lastDay = end.getDate();
+
+    rows.forEach(r => {
+      const d = r.dayOfMonth as number;
+      const t = r.total as number;
+      if (d <= 7) w1 += t;
+      else if (d <= 14) w2 += t;
+      else if (d <= 21) w3 += t;
+      else if (d <= 28) w4 += t;
+      else w5 += t;
     });
+
+    // Only include weeks that have started (i.e. first day of week <= lastDay)
+    const result: TrendDataPoint[] = [
+      { label: 'Week 1', value: w1, date: startDate },
+    ];
+    if (lastDay > 7)  result.push({ label: 'Week 2', value: w2, date: startDate });
+    if (lastDay > 14) result.push({ label: 'Week 3', value: w3, date: startDate });
+    if (lastDay > 21) result.push({ label: 'Week 4', value: w4, date: startDate });
+    if (maxDays > 28 && lastDay > 28) result.push({ label: 'Week 5', value: w5, date: startDate });
+
+    return result;
   },
 
   async getHeatmapData(startDate: string, endDate: string): Promise<Record<string, number>> {
@@ -97,10 +124,16 @@ export const analyticsRepository = {
   async getTopMerchants(startDate: string, endDate: string, limit = 5): Promise<MerchantSummary[]> {
     const db = getDb();
     const rows = await db.getAllAsync<Record<string, unknown>>(
-      `SELECT merchant, SUM(amount) as total, COUNT(id) as count FROM transactions WHERE type = 'expense' AND date >= $startDate AND date <= $endDate AND merchant IS NOT NULL AND merchant != '' GROUP BY merchant ORDER BY total DESC LIMIT $limit`,
+      `SELECT t.merchant as merchant_name, SUM(t.amount) as total, COUNT(t.id) as count, MAX(c.color) as category_color, MAX(c.name) as category_name 
+       FROM transactions t 
+       LEFT JOIN categories c ON t.category_id = c.id
+       WHERE t.type = 'expense' AND t.date >= $startDate AND t.date <= $endDate 
+         AND t.merchant IS NOT NULL AND TRIM(t.merchant) != ''
+       GROUP BY t.merchant 
+       ORDER BY total DESC LIMIT $limit`,
       { $startDate: startDate, $endDate: endDate, $limit: limit }
     );
-    return rows.map(r => ({ merchant: r.merchant as string, total: r.total as number, count: r.count as number }));
+    return rows.map(r => ({ merchant: r.merchant_name as string, total: r.total as number, count: r.count as number, categoryColor: r.category_color as string | undefined, categoryName: r.category_name as string | undefined }));
   },
 
   async getImpulseStats(startDate: string, endDate: string): Promise<ImpulseStats> {

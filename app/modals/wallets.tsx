@@ -2,7 +2,7 @@
  * Wallet Management Screen — Create, edit, delete wallets and set default.
  */
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -31,11 +31,13 @@ export default function WalletsScreen() {
   const wallets = useStore((s) => s.wallets);
   const addWallet = useStore((s) => s.addWallet);
   const deleteWallet = useStore((s) => s.deleteWallet);
+  const updateWallet = useStore((s) => s.updateWallet);
   const setDefaultWallet = useStore((s) => s.setDefaultWallet);
   const fetchWallets = useStore((s) => s.fetchWallets);
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<WalletFormState>(defaultForm);
+  const [editWalletId, setEditWalletId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { fetchWallets(); }, []);
@@ -44,17 +46,44 @@ export default function WalletsScreen() {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      await addWallet({
-        name: form.name.trim(),
-        type: form.type,
-        icon: form.icon,
-        currency: 'INR',
-        balance: Math.round(parseFloat(form.balance || '0') * 100),
-      });
+      if (editWalletId) {
+        await updateWallet(editWalletId, {
+          name: form.name.trim(),
+          type: form.type,
+          icon: form.icon,
+          balance: Math.round(parseFloat(form.balance || '0') * 100),
+        });
+      } else {
+        await addWallet({
+          name: form.name.trim(),
+          type: form.type,
+          icon: form.icon,
+          currency: 'INR',
+          balance: Math.round(parseFloat(form.balance || '0') * 100),
+        });
+      }
       setForm(defaultForm);
+      setEditWalletId(null);
       setShowForm(false);
     } catch (e) { console.error(e); }
     setSaving(false);
+  };
+
+  const handleEdit = (wallet: Wallet) => {
+    setEditWalletId(wallet.id);
+    setForm({
+      name: wallet.name,
+      type: wallet.type,
+      icon: wallet.icon || WALLET_ICONS[wallet.type],
+      balance: (wallet.balance / 100).toFixed(2),
+    });
+    setShowForm(true);
+  };
+
+  const openNewForm = () => {
+    setEditWalletId(null);
+    setForm(defaultForm);
+    setShowForm(true);
   };
 
   const handleDelete = (wallet: Wallet) => {
@@ -72,7 +101,7 @@ export default function WalletsScreen() {
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.title}>Wallets</Text>
-        <Pressable onPress={() => setShowForm(true)} style={styles.addBtn}>
+        <Pressable onPress={openNewForm} style={styles.addBtn}>
           <Ionicons name="add" size={24} color={colors.cyan} />
         </Pressable>
       </View>
@@ -99,6 +128,9 @@ export default function WalletsScreen() {
                     <Ionicons name="star-outline" size={18} color={colors.cyan} />
                   </Pressable>
                 )}
+                <Pressable onPress={() => handleEdit(w)} style={styles.actionBtn}>
+                  <Ionicons name="pencil-outline" size={18} color={colors.cyan} />
+                </Pressable>
                 <Pressable onPress={() => handleDelete(w)} style={styles.actionBtn}>
                   <Ionicons name="trash-outline" size={18} color={colors.expense} />
                 </Pressable>
@@ -112,53 +144,58 @@ export default function WalletsScreen() {
       {/* Add Wallet Modal */}
       <Modal visible={showForm} transparent animationType="slide" onRequestClose={() => setShowForm(false)}>
         <Pressable style={styles.overlay} onPress={() => setShowForm(false)} />
-        <View style={styles.formSheet}>
-          <View style={styles.formHandle} />
-          <Text style={styles.formTitle}>New Wallet</Text>
+        <KeyboardAvoidingView 
+          style={styles.formSheetContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.formSheet}>
+            <View style={styles.formHandle} />
+            <Text style={styles.formTitle}>{editWalletId ? 'Edit Wallet' : 'New Wallet'}</Text>
 
-          <Text style={styles.fieldLabel}>Name</Text>
-          <TextInput
-            style={styles.input}
-            value={form.name}
-            onChangeText={(v) => setForm({ ...form, name: v })}
-            placeholder="e.g. HDFC Savings"
-            placeholderTextColor={colors.textMuted}
-          />
+            <Text style={styles.fieldLabel}>Name</Text>
+            <TextInput
+              style={styles.input}
+              value={form.name}
+              onChangeText={(v) => setForm({ ...form, name: v })}
+              placeholder="e.g. HDFC Savings"
+              placeholderTextColor={colors.textMuted}
+            />
 
-          <Text style={styles.fieldLabel}>Type</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeRow}>
-            {WALLET_TYPES.map((t) => (
-              <Pressable
-                key={t}
-                onPress={() => setForm({ ...form, type: t, icon: WALLET_ICONS[t] })}
-                style={[styles.typeChip, form.type === t && styles.typeChipActive]}
-              >
-                <Text style={styles.typeChipIcon}>{WALLET_ICONS[t]}</Text>
-                <Text style={[styles.typeChipText, form.type === t && styles.typeChipTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+            <Text style={styles.fieldLabel}>Type</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeRow}>
+              {WALLET_TYPES.map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setForm({ ...form, type: t, icon: WALLET_ICONS[t] })}
+                  style={[styles.typeChip, form.type === t && styles.typeChipActive]}
+                >
+                  <Text style={styles.typeChipIcon}>{WALLET_ICONS[t]}</Text>
+                  <Text style={[styles.typeChipText, form.type === t && styles.typeChipTextActive]}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
 
-          <Text style={styles.fieldLabel}>Opening Balance (₹)</Text>
-          <TextInput
-            style={styles.input}
-            value={form.balance}
-            onChangeText={(v) => setForm({ ...form, balance: v })}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor={colors.textMuted}
-          />
+            <Text style={styles.fieldLabel}>Balance (₹)</Text>
+            <TextInput
+              style={styles.input}
+              value={form.balance}
+              onChangeText={(v) => setForm({ ...form, balance: v })}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textMuted}
+            />
 
-          <Pressable
-            onPress={handleSave}
-            disabled={!form.name.trim() || saving}
-            style={[styles.saveBtn, (!form.name.trim() || saving) && styles.saveBtnDisabled]}
-          >
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Add Wallet'}</Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={handleSave}
+              disabled={!form.name.trim() || saving}
+              style={[styles.saveBtn, (!form.name.trim() || saving) && styles.saveBtnDisabled]}
+            >
+              <Text style={styles.saveBtnText}>{saving ? 'Saving…' : editWalletId ? 'Save Changes' : 'Add Wallet'}</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -185,7 +222,8 @@ const styles = StyleSheet.create({
 
   // Modal
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-  formSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface1, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  formSheetContainer: { position: 'absolute', bottom: 0, left: 0, right: 0 },
+  formSheet: { backgroundColor: colors.surface1, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   formHandle: { width: 40, height: 4, backgroundColor: colors.surface3, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   formTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 20 },
   fieldLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: '500', marginBottom: 8, marginTop: 12 },

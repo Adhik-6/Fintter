@@ -162,8 +162,8 @@ export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
       {
         name: 'HDFC Bank Debit',
         source: 'sms',
-        pattern: 'Rs\\.?(\\d+[\\.\\d]*)\\s+debited.*HDFC',
-        amountGroup: 1,
+        pattern: 'Rs\\.?(?<amount>[\\d,]+(?:\\.\\d{1,2})?)\\s+debited.*HDFC',
+        amountGroup: null,
         merchantGroup: null,
         type: 'expense',
         defaultCategoryId: defaultCatId,
@@ -171,8 +171,8 @@ export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
       {
         name: 'HDFC Bank Credit',
         source: 'sms',
-        pattern: 'Rs\\.?(\\d+[\\.\\d]*)\\s+credited.*HDFC',
-        amountGroup: 1,
+        pattern: 'Rs\\.?(?<amount>[\\d,]+(?:\\.\\d{1,2})?)\\s+credited.*HDFC',
+        amountGroup: null,
         merchantGroup: null,
         type: 'income',
         defaultCategoryId: salaryCatId,
@@ -180,8 +180,8 @@ export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
       {
         name: 'SBI Debit',
         source: 'sms',
-        pattern: 'debited by Rs\\.?(\\d+[\\.\\d]*).*SBI',
-        amountGroup: 1,
+        pattern: 'debited by Rs\\.?(?<amount>[\\d,]+(?:\\.\\d{1,2})?).*SBI',
+        amountGroup: null,
         merchantGroup: null,
         type: 'expense',
         defaultCategoryId: defaultCatId,
@@ -189,9 +189,27 @@ export async function seedDatabase(db: SQLiteDatabase): Promise<void> {
       {
         name: 'UPI Payment',
         source: 'sms',
-        pattern: 'Rs\\.?(\\d+[\\.\\d]*).*(?:paid to|sent to)\\s+(.+?)\\s',
-        amountGroup: 1,
-        merchantGroup: 2,
+        pattern: 'Rs\\.?(?<amount>[\\d,]+(?:\\.\\d{1,2})?).*(?:paid to|sent to)\\s+(?<merchant>[A-Za-z0-9\\s@_.-]+?)(?:\\s|$)',
+        amountGroup: null,
+        merchantGroup: null,
+        type: 'expense',
+        defaultCategoryId: defaultCatId,
+      },
+      {
+        name: 'ICICI Bank Debit',
+        source: 'sms',
+        pattern: 'INR\\s*(?<amount>[\\d,]+(?:\\.\\d{1,2})?)\\s+(?:debited|deducted).*ICICI',
+        amountGroup: null,
+        merchantGroup: null,
+        type: 'expense',
+        defaultCategoryId: defaultCatId,
+      },
+      {
+        name: 'Kotak Bank Debit',
+        source: 'sms',
+        pattern: 'Rs\\.?(?<amount>[\\d,]+(?:\\.\\d{1,2})?)\\s+debited.*Kotak',
+        amountGroup: null,
+        merchantGroup: null,
         type: 'expense',
         defaultCategoryId: defaultCatId,
       },
@@ -584,7 +602,7 @@ export async function seedTestData(db: SQLiteDatabase): Promise<void> {
         await txStmt.executeAsync({
           $amount: 2200000, // ₹22,000
           $type: 'income',
-          $categoryId: getCatId('Side Hustle'),
+          $categoryId: getCatId('Bonus') ?? 1,
           $walletId: bankWalletId,
           $toWalletId: null,
           $note: 'Upwork Project Milestones',
@@ -605,7 +623,7 @@ export async function seedTestData(db: SQLiteDatabase): Promise<void> {
         await txStmt.executeAsync({
           $amount: 69900, // ₹699
           $type: 'expense',
-          $categoryId: getCatId('Subscriptions'),
+          $categoryId: getCatId('Other') ?? 1,
           $walletId: bankWalletId,
           $toWalletId: null,
           $note: 'Netflix subscription',
@@ -623,7 +641,7 @@ export async function seedTestData(db: SQLiteDatabase): Promise<void> {
         await txStmt.executeAsync({
           $amount: 29900, // ₹299
           $type: 'expense',
-          $categoryId: getCatId('Subscriptions'),
+          $categoryId: getCatId('Other') ?? 1,
           $walletId: bankWalletId,
           $toWalletId: null,
           $note: 'Spotify Premium Family plan',

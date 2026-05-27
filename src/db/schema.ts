@@ -56,8 +56,10 @@ export const CREATE_TRANSACTIONS_TABLE = `
     mood_id INTEGER REFERENCES moods(id),
     is_impulse INTEGER NOT NULL DEFAULT 0,
     is_recurring INTEGER NOT NULL DEFAULT 0,
-    recurring_id INTEGER REFERENCES recurring_templates(id),
+    next_transaction_id INTEGER REFERENCES transactions(id),
+    recurring_days INTEGER,
     source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'sms', 'notification', 'import')),
+    budget_id INTEGER REFERENCES budgets(id),
     date TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -74,28 +76,11 @@ export const CREATE_BUDGETS_TABLE = `
     period TEXT NOT NULL CHECK(period IN ('daily', 'weekly', 'monthly', 'yearly', 'custom')),
     start_date TEXT NOT NULL,
     end_date TEXT,
+    scope TEXT NOT NULL DEFAULT 'overall' CHECK(scope IN ('overall', 'category_group', 'manual')),
+    category_ids TEXT,
+    budget_transaction_ids TEXT,
     rollover INTEGER NOT NULL DEFAULT 0,
     alert_at_percent INTEGER NOT NULL DEFAULT 80,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-`;
-
-export const CREATE_RECURRING_TEMPLATES_TABLE = `
-  CREATE TABLE IF NOT EXISTS recurring_templates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    amount INTEGER NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('expense', 'income')),
-    category_id INTEGER NOT NULL REFERENCES categories(id),
-    wallet_id INTEGER NOT NULL REFERENCES wallets(id),
-    frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
-    interval INTEGER NOT NULL DEFAULT 1,
-    next_due TEXT NOT NULL,
-    last_triggered TEXT,
-    end_date TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    note TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -173,7 +158,6 @@ export const CREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet ON transactions(wallet_id);
   CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
   CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);
-  CREATE INDEX IF NOT EXISTS idx_recurring_next_due ON recurring_templates(next_due);
   CREATE INDEX IF NOT EXISTS idx_categories_type ON categories(type);
 `;
 
@@ -182,7 +166,6 @@ export const ALL_CREATE_STATEMENTS = [
   CREATE_WALLETS_TABLE,
   CREATE_CATEGORIES_TABLE,
   CREATE_MOODS_TABLE,
-  CREATE_RECURRING_TEMPLATES_TABLE,
   CREATE_TRANSACTIONS_TABLE,
   CREATE_BUDGETS_TABLE,
   CREATE_REMINDERS_TABLE,

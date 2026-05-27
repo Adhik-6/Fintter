@@ -3,17 +3,24 @@
  */
 
 export type BudgetPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+export type BudgetScope = 'overall' | 'category_group' | 'manual';
 
 export interface Budget {
   id: number;
   name: string;
-  categoryId: number | null; // null = total budget across all categories
+  categoryId: number | null; // legacy null = total budget across all categories
   walletId: number | null; // null = all wallets
   /** Budget limit in smallest currency unit */
   amount: number;
   period: BudgetPeriod;
+  scope: BudgetScope;
+  categoryIds: string | null;
+  budgetTransactionIds: string | null;
   startDate: string;
   endDate: string | null;
+  resetIntervalValue: number | null;
+  resetIntervalUnit: string | null;
+  icon: string | null;
   rollover: number; // SQLite boolean
   alertAtPercent: number;
   createdAt: string;
@@ -32,8 +39,14 @@ export interface CreateBudgetInput {
   walletId?: number | null;
   amount: number;
   period: BudgetPeriod;
+  scope?: BudgetScope;
+  categoryIds?: string | null;
+  budgetTransactionIds?: string | null;
   startDate: string;
   endDate?: string | null;
+  resetIntervalValue?: number | null;
+  resetIntervalUnit?: string | null;
+  icon?: string | null;
   rollover?: number;
   alertAtPercent?: number;
 }
@@ -44,8 +57,14 @@ export interface UpdateBudgetInput {
   walletId?: number | null;
   amount?: number;
   period?: BudgetPeriod;
+  scope?: BudgetScope;
+  categoryIds?: string | null;
+  budgetTransactionIds?: string | null;
   startDate?: string;
   endDate?: string | null;
+  resetIntervalValue?: number | null;
+  resetIntervalUnit?: string | null;
+  icon?: string | null;
   rollover?: number;
   alertAtPercent?: number;
 }

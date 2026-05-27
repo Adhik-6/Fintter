@@ -11,6 +11,69 @@ import { shareAsync } from 'expo-sharing';
 import { getDb } from '@src/db';
 import { config } from '@src/constants/config';
 import { format } from 'date-fns';
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+async function importCsv(content: string, db: SQLiteDatabase): Promise<Record<string, number>> {
+  const lines = content.split('\n').filter(l => l.trim().length > 0);
+  if (lines.length <= 1) return { transactions: 0 };
+  
+  const parseRow = (str: string) => {
+    const row = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === '"') {
+        if (inQuotes && str[i + 1] === '"') {
+          cur += '"'; i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (str[i] === ',' && !inQuotes) {
+        row.push(cur); cur = '';
+      } else {
+        cur += str[i];
+      }
+    }
+    row.push(cur);
+    return row;
+  };
+
+  const counts = { transactions: 0, categories: 0, wallets: 0 };
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseRow(lines[i]);
+    if (row.length < 8) continue;
+    const [date, type, amountStr, categoryName, walletName, merchant, note, source] = row;
+    
+    let categoryId = null;
+    if (categoryName) {
+      const cat = await db.getFirstAsync<{id: number}>('SELECT id FROM categories WHERE name = ? COLLATE NOCASE', [categoryName]);
+      if (cat) { categoryId = cat.id; }
+      else {
+        const res = await db.runAsync('INSERT INTO categories (name, icon, color, type, is_system, created_at) VALUES (?, ?, ?, ?, 0, ?)', [categoryName, '🏷️', '#06B6D4', type || 'expense', new Date().toISOString()]);
+        categoryId = res.lastInsertRowId;
+        counts.categories++;
+      }
+    }
+    
+    let walletId = null;
+    if (walletName) {
+      const wal = await db.getFirstAsync<{id: number}>('SELECT id FROM wallets WHERE name = ? COLLATE NOCASE', [walletName]);
+      if (wal) { walletId = wal.id; }
+      else {
+        const res = await db.runAsync('INSERT INTO wallets (name, type, currency, balance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [walletName, 'cash', 'INR', 0, new Date().toISOString(), new Date().toISOString()]);
+        walletId = res.lastInsertRowId;
+        counts.wallets++;
+      }
+    }
+    
+    await db.runAsync(
+      `INSERT INTO transactions (amount, type, category_id, wallet_id, merchant, note, source, date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [Number(amountStr), type || 'expense', categoryId, walletId, merchant, note, source, date, new Date().toISOString(), new Date().toISOString()]
+    );
+    counts.transactions++;
+  }
+  return counts;
+}
 
 export interface BackupData {
   version: number;
@@ -21,7 +84,6 @@ export interface BackupData {
     categories: Record<string, unknown>[];
     transactions: Record<string, unknown>[];
     budgets: Record<string, unknown>[];
-    recurring_templates: Record<string, unknown>[];
     moods: Record<string, unknown>[];
     streaks: Record<string, unknown>[];
     milestones: Record<string, unknown>[];
@@ -35,12 +97,11 @@ export interface BackupData {
 export async function exportBackup(): Promise<string> {
   const db = getDb();
 
-  const [wallets, categories, transactions, budgets, recurring, moods, streaks, milestones, settings] = await Promise.all([
+  const [wallets, categories, transactions, budgets, moods, streaks, milestones, settings] = await Promise.all([
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM wallets'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM categories'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM transactions'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM budgets'),
-    db.getAllAsync<Record<string, unknown>>('SELECT * FROM recurring_templates'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM moods'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM streaks'),
     db.getAllAsync<Record<string, unknown>>('SELECT * FROM milestones'),
@@ -53,7 +114,7 @@ export async function exportBackup(): Promise<string> {
     appVersion: config.app.version,
     data: {
       wallets, categories, transactions, budgets,
-      recurring_templates: recurring, moods, streaks, milestones, settings,
+      moods, streaks, milestones, settings,
     },
   };
 
@@ -77,7 +138,7 @@ export async function exportBackup(): Promise<string> {
  */
 export async function importBackup(): Promise<Record<string, number> | null> {
   const result = await DocumentPicker.getDocumentAsync({
-    type: 'application/json',
+    type: '*/*',
     copyToCacheDirectory: true,
   });
 
@@ -89,7 +150,11 @@ export async function importBackup(): Promise<Record<string, number> | null> {
   let backup: BackupData;
   try {
     backup = JSON.parse(content);
-  } catch {
+  } catch (error) {
+    if (content.startsWith('Date,Type,Amount')) {
+      const db = getDb();
+      return await importCsv(content, db);
+    }
     throw new Error('Invalid backup file format');
   }
 
@@ -105,9 +170,8 @@ export async function importBackup(): Promise<Record<string, number> | null> {
     { name: 'wallets', columns: ['id', 'name', 'type', 'currency', 'balance', 'icon', 'color', 'is_default', 'created_at', 'updated_at'] },
     { name: 'categories', columns: ['id', 'name', 'icon', 'color', 'type', 'parent_id', 'is_system', 'created_at'] },
     { name: 'moods', columns: ['id', 'label', 'emoji', 'valence', 'created_at'] },
-    { name: 'transactions', columns: ['id', 'amount', 'type', 'category_id', 'wallet_id', 'to_wallet_id', 'note', 'merchant', 'tags', 'mood_id', 'is_impulse', 'is_recurring', 'recurring_id', 'source', 'date', 'created_at', 'updated_at'] },
+    { name: 'transactions', columns: ['id', 'amount', 'type', 'category_id', 'wallet_id', 'to_wallet_id', 'note', 'merchant', 'tags', 'mood_id', 'is_impulse', 'is_recurring', 'recurring_days', 'next_transaction_id', 'source', 'date', 'created_at', 'updated_at'] },
     { name: 'budgets', columns: ['id', 'name', 'category_id', 'wallet_id', 'amount', 'period', 'start_date', 'end_date', 'rollover', 'alert_at_percent', 'created_at', 'updated_at'] },
-    { name: 'recurring_templates', columns: ['id', 'name', 'amount', 'type', 'category_id', 'wallet_id', 'frequency', 'interval', 'next_due', 'last_triggered', 'end_date', 'is_active', 'note', 'created_at', 'updated_at'] },
     { name: 'streaks', columns: ['id', 'type', 'current_count', 'longest_count', 'last_achieved', 'updated_at'] },
     { name: 'milestones', columns: ['id', 'type', 'label', 'achieved_at', 'is_shown'] },
     { name: 'settings', columns: ['key', 'value', 'updated_at'] },

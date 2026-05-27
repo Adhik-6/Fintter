@@ -6,6 +6,9 @@
 import * as SQLite from 'expo-sqlite';
 import { config } from '@src/constants/config';
 import { migrate001, MIGRATION_001_VERSION } from './migrations/001_initial';
+import { migrate002, MIGRATION_002_VERSION } from './migrations/002_linked_list';
+import { migrate003, MIGRATION_003_VERSION } from './migrations/003_budget_scopes';
+import { migrate004, MIGRATION_004_VERSION } from './migrations/004_budget_reset_periods';
 import { seedDatabase } from './seed';
 export { seedTestData } from './seed';
 
@@ -44,6 +47,39 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (currentVersion < MIGRATION_001_VERSION) {
       await migrate001(db);
       await db.execAsync(`PRAGMA user_version = ${MIGRATION_001_VERSION};`);
+    }
+    if (currentVersion < MIGRATION_002_VERSION) {
+      await migrate002(db);
+      await db.execAsync(`PRAGMA user_version = ${MIGRATION_002_VERSION};`);
+    }
+    if (currentVersion < MIGRATION_003_VERSION) {
+      await migrate003(db);
+      await db.execAsync(`PRAGMA user_version = ${MIGRATION_003_VERSION};`);
+    }
+    if (currentVersion < MIGRATION_004_VERSION) {
+      await migrate004(db);
+      await db.execAsync(`PRAGMA user_version = ${MIGRATION_004_VERSION};`);
+    }
+
+    // Patch categories (Issue 5)
+    try {
+      const patchDone = await db.getFirstAsync<{ done: number }>("SELECT 1 as done FROM categories WHERE name = 'People' LIMIT 1");
+      if (!patchDone) {
+        await db.execAsync(`
+          UPDATE categories SET name = 'People', icon = '🫂', color = '#6366F1' WHERE name = 'Subscriptions' AND type = 'expense';
+          UPDATE categories SET name = 'Pocket Money', icon = '🪙', color = '#10B981' WHERE name = 'Freelance' AND type = 'income';
+          INSERT OR IGNORE INTO categories (name, icon, color, type, is_system, created_at) VALUES ('Bonus', '🎉', '#F59E0B', 'income', 1, datetime('now'));
+        `);
+        // Move Travel txs to Other and delete Travel
+        const otherExpense = await db.getFirstAsync<{ id: number }>("SELECT id FROM categories WHERE name = 'Other' AND type = 'expense' LIMIT 1");
+        const travelCat = await db.getFirstAsync<{ id: number }>("SELECT id FROM categories WHERE name = 'Travel' AND type = 'expense' LIMIT 1");
+        if (otherExpense && travelCat) {
+          await db.execAsync(`UPDATE transactions SET category_id = ${otherExpense.id} WHERE category_id = ${travelCat.id}`);
+          await db.execAsync(`DELETE FROM categories WHERE id = ${travelCat.id}`);
+        }
+      }
+    } catch (e) {
+      console.log('Patch error', e);
     }
 
     // Seed data (idempotent — checks if data exists before inserting)

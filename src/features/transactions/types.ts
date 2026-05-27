@@ -19,8 +19,10 @@ export interface Transaction {
   moodId: number | null;
   isImpulse: number; // SQLite boolean
   isRecurring: number; // SQLite boolean
-  recurringId: number | null;
+  nextTransactionId: number | null;
+  recurringDays: number | null;
   source: TransactionSource;
+  budgetId: number | null;
   date: string; // ISO 8601
   createdAt: string;
   updatedAt: string;
@@ -48,8 +50,10 @@ export interface CreateTransactionInput {
   moodId?: number | null;
   isImpulse?: number;
   isRecurring?: number;
-  recurringId?: number | null;
+  nextTransactionId?: number | null;
+  recurringDays?: number | null;
   source?: TransactionSource;
+  budgetId?: number | null;
   date?: string;
 }
 
@@ -64,6 +68,10 @@ export interface UpdateTransactionInput {
   tags?: string[];
   moodId?: number | null;
   isImpulse?: number;
+  isRecurring?: number;
+  nextTransactionId?: number | null;
+  recurringDays?: number | null;
+  budgetId?: number | null;
   date?: string;
 }
 

@@ -3,19 +3,20 @@
  */
 import { useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
-import { formatAmount } from '@src/utils/currency';
+import { formatAmount, formatAmountCompact } from '@src/utils/currency';
 import { getGreeting, formatTransactionDate, formatTime } from '@src/utils/date';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useState } from 'react';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [balanceVisible, setBalanceVisible] = useState(true);
+  const [balanceVisible, setBalanceVisible] = useState(false);
 
   const wallets = useStore((s) => s.wallets);
   const activeWalletId = useStore((s) => s.activeWalletId);
@@ -33,20 +34,29 @@ export default function DashboardScreen() {
     ? allTransactions.filter((t) => t.walletId === activeWalletId)
     : allTransactions;
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = useCallback(async () => {
-    const today = new Date();
     await Promise.all([
-      fetchTransactions({ limit: 5 }),
+      fetchTransactions({ limit: 500 }),
       fetchWallets(),
       fetchBudgets(),
     ]);
     // Compute after budgets load
     setTimeout(() => computeBudgetProgress(), 100);
   }, [fetchTransactions, fetchWallets, fetchBudgets, computeBudgetProgress]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Auto-hide balance when navigating away; reload data on focus so income/expense is always fresh
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      return () => {
+        setBalanceVisible(false);
+      };
+    }, [loadData])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -59,14 +69,21 @@ export default function DashboardScreen() {
     : wallets.reduce((sum, w) => sum + w.balance, 0);
   const activeWallet = wallets.find((w) => w.id === activeWalletId);
 
-  // Today's totals
-  const todayStart = format(startOfDay(new Date()), "yyyy-MM-dd'T'HH:mm:ss");
-  const todayEnd = format(endOfDay(new Date()), "yyyy-MM-dd'T'HH:mm:ss");
+  // Today's totals — parse ISO to get local date before comparing to avoid UTC vs local timezone mismatch
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const isTodayTx = (dateStr: string) => {
+    if (dateStr.length === 10) return dateStr === todayStr;
+    try {
+      return format(parseISO(dateStr), 'yyyy-MM-dd') === todayStr;
+    } catch {
+      return dateStr.startsWith(todayStr);
+    }
+  };
   const todayExpenses = transactions
-    .filter((t) => t.type === 'expense' && t.date >= todayStart && t.date <= todayEnd)
+    .filter((t) => t.type === 'expense' && isTodayTx(t.date))
     .reduce((sum, t) => sum + t.amount, 0);
   const todayIncome = transactions
-    .filter((t) => t.type === 'income' && t.date >= todayStart && t.date <= todayEnd)
+    .filter((t) => t.type === 'income' && isTodayTx(t.date))
     .reduce((sum, t) => sum + t.amount, 0);
 
   return (
@@ -128,14 +145,14 @@ export default function DashboardScreen() {
         <Animated.View entering={FadeInDown.delay(150).duration(400)} style={styles.summaryRow}>
           <View style={[styles.summaryCard, { borderLeftColor: colors.income }]}>
             <Text style={styles.summaryLabel}>Income</Text>
-            <Text style={[styles.summaryAmount, { color: colors.income }]}>
-              {formatAmount(todayIncome)}
+            <Text style={[styles.summaryAmount, { color: colors.income }]} numberOfLines={1}>
+              {formatAmountCompact(todayIncome)}
             </Text>
           </View>
           <View style={[styles.summaryCard, { borderLeftColor: colors.expense }]}>
             <Text style={styles.summaryLabel}>Expense</Text>
-            <Text style={[styles.summaryAmount, { color: colors.expense }]}>
-              {formatAmount(todayExpenses)}
+            <Text style={[styles.summaryAmount, { color: colors.expense }]} numberOfLines={1}>
+              {formatAmountCompact(todayExpenses)}
             </Text>
           </View>
         </Animated.View>
@@ -164,6 +181,23 @@ export default function DashboardScreen() {
           </Animated.View>
         )}
 
+        {/* Category Wise Spending Button */}
+        <Animated.View entering={FadeInDown.delay(220).duration(400)} style={{ marginBottom: 24 }}>
+          <Pressable 
+            style={{ backgroundColor: colors.surface1, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            onPress={() => router.push('/modals/category-spending')}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Text style={{ fontSize: 24 }}>📊</Text>
+              <View>
+                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>Category Wise Spending</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Analyze your expenses by category</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </Pressable>
+        </Animated.View>
+
         {/* Recent Transactions */}
         <Animated.View entering={FadeInDown.delay(250).duration(400)}>
           <View style={styles.sectionHeader}>
@@ -180,14 +214,21 @@ export default function DashboardScreen() {
               <Text style={styles.emptySubtext}>Tap + to add your first expense</Text>
             </View>
           ) : (
-            transactions.slice(0, 5).map((tx, idx) => (
+            transactions.slice(0, 10).map((tx, idx) => (
               <Animated.View key={tx.id} entering={FadeInDown.delay(300 + idx * 50).duration(300)}>
                 <Pressable
                   style={styles.txCard}
                   onPress={() => router.push({ pathname: '/modals/transaction-detail', params: { id: tx.id } })}
                 >
-                  <View style={[styles.txIconWrap, { backgroundColor: tx.categoryColor + '20' }]}>
-                    <Text style={styles.txIcon}>{tx.categoryIcon}</Text>
+                  <View style={{ position: 'relative', marginRight: 12 }}>
+                    <View style={[styles.txIconWrap, { backgroundColor: tx.categoryColor + '20' }]}>
+                      <Text style={styles.txIcon}>{tx.categoryIcon}</Text>
+                    </View>
+                    {tx.isRecurring === 1 && (
+                      <View style={styles.txRecurringDot}>
+                        <Ionicons name="repeat" size={9} color={colors.black} />
+                      </View>
+                    )}
                   </View>
                   <View style={styles.txInfo}>
                     <Text style={styles.txName} numberOfLines={1}>
@@ -198,8 +239,8 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
                   <View style={styles.txAmountWrap}>
-                    <Text style={[styles.txAmount, { color: tx.type === 'income' ? colors.income : colors.expense }]}>
-                      {tx.type === 'income' ? '+' : '-'}{formatAmount(tx.amount)}
+                    <Text style={[styles.txAmount, { color: tx.type === 'income' ? colors.income : tx.type === 'transfer' ? colors.transfer : colors.expense }]} numberOfLines={1}>
+                      {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '' : '-'}{formatAmountCompact(tx.amount)}
                     </Text>
                     {tx.moodEmoji && <Text style={styles.txMood}>{tx.moodEmoji}</Text>}
                   </View>
@@ -328,8 +369,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  txIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  txIconWrap: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   txIcon: { fontSize: 20 },
+  txRecurringDot: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.cyan, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface0 },
   txInfo: { flex: 1 },
   txName: { fontSize: 15, color: colors.textPrimary, fontWeight: '500' },
   txMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },

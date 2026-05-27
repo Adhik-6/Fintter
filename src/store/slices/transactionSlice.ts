@@ -10,7 +10,7 @@ export interface TransactionSlice {
   transactions: TransactionWithDetails[];
   isLoadingTransactions: boolean;
   fetchTransactions: (filters?: TransactionFilters) => Promise<void>;
-  addTransaction: (input: CreateTransactionInput) => Promise<void>;
+  addTransaction: (input: CreateTransactionInput) => Promise<number>;
   updateTransaction: (id: number, input: UpdateTransactionInput) => Promise<void>;
   deleteTransaction: (id: number) => Promise<void>;
 }
@@ -22,6 +22,7 @@ export const createTransactionSlice: StateCreator<TransactionSlice, [], [], Tran
   fetchTransactions: async (filters) => {
     set({ isLoadingTransactions: true });
     try {
+      await transactionRepository.processDueRecurringTransactions();
       const transactions = await transactionRepository.getAll(filters);
       set({ transactions, isLoadingTransactions: false });
     } catch (error) {
@@ -32,21 +33,33 @@ export const createTransactionSlice: StateCreator<TransactionSlice, [], [], Tran
 
   addTransaction: async (input) => {
     try {
-      await transactionRepository.create(input);
+      const id = await transactionRepository.create(input);
       // Update wallet balance
-      if (input.type === 'expense') {
-        await walletRepository.updateBalance(input.walletId, -input.amount);
-      } else if (input.type === 'income') {
-        await walletRepository.updateBalance(input.walletId, input.amount);
-      } else if (input.type === 'transfer' && input.toWalletId) {
-        await walletRepository.updateBalance(input.walletId, -input.amount);
-        await walletRepository.updateBalance(input.toWalletId, input.amount);
+      // Note: for future transactions (e.g. generated upcoming ones), we shouldn't update the wallet balance yet!
+      // But we will handle that logically by not updating if date > today
+      const txDate = input.date ? (input.date.length === 10 ? new Date(input.date) : new Date(input.date)) : new Date();
+      const today = new Date();
+      // Simple check to only update balance if transaction is not in the future
+      if (txDate.getTime() <= today.getTime() + 86400000) {
+        if (input.type === 'expense') {
+          await walletRepository.updateBalance(input.walletId, -input.amount);
+        } else if (input.type === 'income') {
+          await walletRepository.updateBalance(input.walletId, input.amount);
+        } else if (input.type === 'transfer' && input.toWalletId) {
+          await walletRepository.updateBalance(input.walletId, -input.amount);
+          await walletRepository.updateBalance(input.toWalletId, input.amount);
+        }
       }
       // Refresh
       const transactions = await transactionRepository.getAll({ limit: 50 });
       set({ transactions });
+      // Immediately refresh budget progress so it reflects the new transaction
+      const computeProgress = (get() as any).computeBudgetProgress;
+      if (typeof computeProgress === 'function') computeProgress();
+      return id;
     } catch (error) {
       console.error('[Store] addTransaction error:', error);
+      throw error;
     }
   },
 

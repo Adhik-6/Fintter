@@ -1,5 +1,10 @@
 ## TODO
 
-1. When opening the history page initially, i see all the list of transactions that has ever been made, and the current date is not selcted (Only the font color of the current date was different). Only when i click on the current date, I'm able to see today's transactions. So when i open the history, initially, today's date is selected and today's transactions must be displayed.
-2. Also there seems to be too much padding for the components above the transactions list. Except for the heading "History", make everything scrollable.
-3.  TEST: The workflow for "Smart sms scan" must be changed. If users have enough time to copy and paste every message into this, then they can also manually type the transactions details in the same time. The sms parser must scan the sms that appears in my messages app and should display the list of possible transactions. The users must decide which one are valid and edit the possible transactions if necessary. Only then they can be added to the user's transaction list.
+1. 
+
+## Others (DON'T FIX THESE)
+1. [x] TEST: The workflow for "Smart sms scan" must be changed. If users have enough time to copy and paste every message into this, then they can also manually type the transactions details in the same time. The sms parser must scan the sms that appears in my messages app and should display the list of possible transactions. The users must decide which one are valid and edit the possible transactions if necessary. Only then they can be added to the user's transaction list.
+2. [x] Notification not working on production build. Got the message "Development build required" in app settings while i was in production build.
+4. [x] Make sure the clear data is working.
+5. Add encryption for backup & implement app password for for clearing data
+6. Future enhancements are written in [fintter_undone](./fintter_plan_undone.md)

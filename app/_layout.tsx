@@ -8,7 +8,6 @@ import { useFonts } from 'expo-font';
 import { initializeDatabase } from '@src/db';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
-import { processRecurringTransactions } from '@src/services/recurringService';
 import { updateStreaks, checkTransactionMilestones } from '@src/services/gamificationEngine';
 import { ConfettiOverlay } from '@src/components/animated/ConfettiOverlay';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -37,8 +36,7 @@ export default function RootLayout() {
         // Hydrate critical store data
         await Promise.all([fetchWallets(), fetchCategories()]);
         setDbReady(true);
-        // Fire-and-forget: process recurring txns & update gamification
-        processRecurringTransactions().catch(console.warn);
+        // Fire-and-forget: update gamification
         updateStreaks().catch(console.warn);
         checkTransactionMilestones().catch(console.warn);
       } catch (error) {
@@ -129,14 +127,6 @@ export default function RootLayout() {
           />
           <Stack.Screen
             name="modals/categories"
-            options={{
-              presentation: 'card',
-              animation: 'slide_from_right',
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="modals/recurring"
             options={{
               presentation: 'card',
               animation: 'slide_from_right',

@@ -4,10 +4,15 @@
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 
 export function formatTransactionDate(dateStr: string): string {
-  const date = parseISO(dateStr);
-  if (isToday(date)) return 'Today';
-  if (isYesterday(date)) return 'Yesterday';
-  return format(date, 'EEE, dd MMM yyyy');
+  try {
+    const date = parseISO(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    if (isToday(date)) return 'Today';
+    if (isYesterday(date)) return 'Yesterday';
+    return format(date, 'EEE, dd MMM yyyy');
+  } catch (e) {
+    return dateStr;
+  }
 }
 
 export function formatTime(dateStr: string): string {
