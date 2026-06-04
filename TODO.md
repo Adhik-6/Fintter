@@ -8,3 +8,4 @@
 4. [x] Make sure the clear data is working.
 5. Add encryption for backup & implement app password for for clearing data
 6. Future enhancements are written in [fintter_undone](./fintter_plan_undone.md)
+7. Command to generate final apk: npx eas build -p android --profile production --clear-cache

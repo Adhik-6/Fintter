@@ -13,16 +13,14 @@ import { Platform } from 'react-native';
 import { format, addHours } from 'date-fns';
 import { formatAmount } from '@src/utils/currency';
 import type { BudgetProgress } from '@src/features/budgets/types';
-import Constants from 'expo-constants';
 
-// Lazily load expo-notifications to prevent Expo Go side-effect warnings
+/** Stable identifier for the daily reminder notification. */
+const DAILY_REMINDER_ID_KEY = 'daily_reminder_notification_id';
+
+// Load expo-notifications — local scheduled notifications work in all environments
+// including Expo Go. The remote-push deprecation warning in Expo Go is cosmetic only.
 function getNotifications() {
   try {
-    // In Expo Go, requiring this throws a loud error about remote push deprecation.
-    // We only load it if not in Expo Go.
-    if (Constants.appOwnership === 'expo') {
-      return null;
-    }
     return require('expo-notifications');
   } catch {
     return null;
@@ -35,7 +33,6 @@ if (Notifications) {
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
         shouldShowBanner: true,
@@ -147,23 +144,54 @@ export async function sendMilestoneNotification(
 }
 
 /**
- * Send a daily summary notification.
+ * Schedule (or reschedule) a daily reminder at the specified local time.
+ * Cancels any previously scheduled daily reminder first.
+ *
+ * @param hour   Local hour in 24-hour format (0–23)
+ * @param minute Local minute (0–59)
+ * @returns The new notification identifier, or '' on failure.
  */
-export async function sendDailySummary(
-  totalSpent: number,
-  transactionCount: number
-): Promise<void> {
+export async function scheduleDailyReminder(hour: number, minute: number): Promise<string> {
+  const Notifications = getNotifications();
+  if (!Notifications) return '';
+  try {
+    // Cancel the old reminder before scheduling a new one
+    await cancelDailyReminder();
+
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '💸 Fintter Daily Check-in',
+        body: "Don't forget to log today's expenses!",
+        data: { type: 'daily_reminder' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+      },
+    });
+
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Cancel the currently scheduled daily reminder.
+ * Reads the stored notification ID from the settings repository.
+ */
+export async function cancelDailyReminder(): Promise<void> {
   const Notifications = getNotifications();
   if (!Notifications) return;
   try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '📊 Daily Summary',
-        body: `You spent ${formatAmount(totalSpent)} across ${transactionCount} transactions today.`,
-        data: { type: 'daily_summary' },
-      },
-      trigger: null,
-    });
+    // Cancel all scheduled notifications with the daily_reminder data type
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const notif of scheduled) {
+      if (notif.content?.data?.type === 'daily_reminder') {
+        await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+      }
+    }
   } catch {
     // Silently ignore
   }

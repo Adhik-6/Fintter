@@ -1,7 +1,7 @@
 /**
  * Dashboard Screen — the main home screen.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -9,14 +9,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@src/store';
 import { colors } from '@src/theme';
 import { formatAmount, formatAmountCompact } from '@src/utils/currency';
-import { getGreeting, formatTransactionDate, formatTime } from '@src/utils/date';
+import { getGreeting, formatTime } from '@src/utils/date';
 import { format, parseISO } from 'date-fns';
-import { useState } from 'react';
+import { settingsRepository } from '@src/db/repositories/settingsRepository';
+import { isPasswordSet } from '@src/services/appPasswordService';
+import { AppPasswordModal } from '@src/components/ui/AppPasswordModal';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(false);
+  const [lockBalance, setLockBalance] = useState(false);
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
 
   const wallets = useStore((s) => s.wallets);
   const activeWalletId = useStore((s) => s.activeWalletId);
@@ -48,10 +52,25 @@ export default function DashboardScreen() {
     loadData();
   }, []);
 
-  // Auto-hide balance when navigating away; reload data on focus so income/expense is always fresh
+  // Load lock-balance setting
+  useEffect(() => {
+    (async () => {
+      const lockBal = await settingsRepository.get('app_lock_balance');
+      const hasPin = await isPasswordSet();
+      setLockBalance(lockBal === '1' && hasPin);
+    })();
+  }, []);
+
+  // Auto-hide balance when navigating away; reload data + refresh lock setting on focus
   useFocusEffect(
     useCallback(() => {
       loadData();
+      // Re-check lock setting in case it changed in settings
+      (async () => {
+        const lockBal = await settingsRepository.get('app_lock_balance');
+        const hasPin = await isPasswordSet();
+        setLockBalance(lockBal === '1' && hasPin);
+      })();
       return () => {
         setBalanceVisible(false);
       };
@@ -102,14 +121,25 @@ export default function DashboardScreen() {
 
         {/* Balance Card */}
         <Animated.View entering={FadeInDown.delay(50).duration(400)}>
-          <Pressable onPress={() => setBalanceVisible(!balanceVisible)} style={styles.balanceCard}>
+          <Pressable
+            onPress={() => {
+              if (balanceVisible) {
+                setBalanceVisible(false);
+              } else if (lockBalance) {
+                setShowBalanceModal(true);
+              } else {
+                setBalanceVisible(true);
+              }
+            }}
+            style={styles.balanceCard}
+          >
             <View style={styles.balanceGlow} />
             <Text style={styles.balanceLabel}>Total Balance</Text>
             <Text style={styles.balanceAmount}>
               {balanceVisible ? formatAmount(totalBalance) : '••••••'}
             </Text>
             <Text style={styles.balanceHint}>
-              {balanceVisible ? 'Tap to hide' : 'Tap to reveal'}
+              {balanceVisible ? 'Tap to hide' : lockBalance ? '🔒 Password required' : 'Tap to reveal'}
             </Text>
           </Pressable>
         </Animated.View>
@@ -262,6 +292,14 @@ export default function DashboardScreen() {
         <View style={styles.fabGlow} />
         <Text style={styles.fabIcon}>+</Text>
       </Pressable>
+
+      {/* Balance password modal */}
+      <AppPasswordModal
+        visible={showBalanceModal}
+        title="Enter Password to View Balance"
+        onSuccess={() => { setShowBalanceModal(false); setBalanceVisible(true); }}
+        onCancel={() => setShowBalanceModal(false)}
+      />
     </View>
   );
 }

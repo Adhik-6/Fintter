@@ -55,7 +55,8 @@
         {
           "faceIDPermission": "Allow Fintter to use Face ID for app lock."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

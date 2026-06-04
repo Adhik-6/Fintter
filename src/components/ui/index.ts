@@ -9,3 +9,4 @@ export { FBottomSheet } from './FBottomSheet';
 export { AnimatedNumber } from './AnimatedNumber';
 export { EmptyState } from './EmptyState';
 export { HealthScoreRing } from './HealthScoreRing';
+export { AppPasswordModal } from './AppPasswordModal';
