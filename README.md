@@ -1,6 +1,8 @@
 <div id="readme-top" align="center">
 
   <h1>Fintter</h1>
+
+  <img src="./assets/images/splash_icon.png" alt="HabitVault Logo" width="200" style="border-radius: 10%; margin-bottom: 20px;" />
   
   <p>A beautifully designed, local-first personal finance tracker with gamification, smart SMS scanning, and rich analytics.</p>
 
