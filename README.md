@@ -3,23 +3,10 @@
   <h1>Fintter</h1>
   
   <p>A beautifully designed, local-first personal finance tracker with gamification, smart SMS scanning, and rich analytics.</p>
-  
-   <!-- Badges -->
-  <p>
-    <a href="https://github.com/Adhik-6/Fintter/stargazers">
-      <img src="https://img.shields.io/github/stars/Adhik-6/Fintter" alt="stars" />
-    </a>
-    <a href="https://github.com/Adhik-6/Fintter/issues/">
-      <img src="https://img.shields.io/github/issues/Adhik-6/Fintter" alt="open issues" />
-    </a>
-    <a href="https://github.com/Adhik-6/Fintter/blob/master/LICENSE">
-      <img src="https://img.shields.io/github/license/Adhik-6/Fintter.svg" alt="license" />
-    </a>
-  </p>
 
 </div>
 
-<p align="center">Fintter is a fast, offline-first personal finance application that helps you track your expenses, manage multiple wallets, maintain budgets, and understand your spending habits. It includes unique features like gamification (streaks and milestones), mood vs. spending correlations, and impulse purchase tracking—all wrapped in a stunning AMOLED-friendly dark theme.</p>
+<p align="center">Fintter is a fast, offline-first personal finance application that helps you track your expenses, manage multiple wallets, maintain budgets, and understand your spending habits. It includes unique features like gamification (streaks and milestones), mood vs. spending correlations, and impulse purchase tracking—all wrapped in a stunning AMOLED-friendly dark theme. The entire app was vibecoded in Antigravity IDE.</p>
 
 <br />
 
@@ -49,7 +36,15 @@ Managing personal finances shouldn't be boring or overly complex. Fintter brings
 
 ### :camera: Screenshots
 
-*(Add screenshots of the Dashboard, Analytics, History Calendar, and Budget Detail views here.)*
+<div align="center" style="margin-bottom: 80px;">
+  <div style="margin-bottom: 40px;">
+    <h3>Home & Dashboard</h3>
+    <p>
+      <img src="./screenshots/home_page.jpeg" alt="Home page screenshot" width="45%" style="margin-right: 5%;" />
+      <img src="./screenshots/category_wise_spending.jpeg" alt="Habits page screenshot" width="45%" />
+    </p>
+  </div>
+</div>
 
 > 📁 Screenshots will be available in the [screenshots folder](./screenshots)
 
@@ -128,7 +123,8 @@ You can then run the app on an Android/iOS emulator, or scan the QR code using t
 - [x] Settings layout and Clear Data functions
 - [ ] Smart SMS / Notification parser
 - [ ] Encrypted backup/restore functionalities
-- [ ] App password and biometric locks
+- [x] App password lock
+- [ ] Biometric locks
 - [ ] Multi-currency support
 
 <!-- CONTRIBUTING -->
